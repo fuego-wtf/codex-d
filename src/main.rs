@@ -33,17 +33,19 @@ fn main() {
 }
 
 struct CodexView {
-    repo_path: String,
-    is_analyzing: bool,
-    observation: Option<types::Observation>,
+    app_state: types::AppState,
+    selected_repo: Option<String>,
+    messages: Vec<types::Message>,
+    lifecycle_events: Vec<types::LifecycleEvent>,
 }
 
 impl CodexView {
     fn new(_cx: &mut Context<Self>) -> Self {
         Self {
-            repo_path: String::new(),
-            is_analyzing: false,
-            observation: None,
+            app_state: types::AppState::AwaitingRepoSelection,
+            selected_repo: None,
+            messages: Vec::new(),
+            lifecycle_events: Vec::new(),
         }
     }
 }
