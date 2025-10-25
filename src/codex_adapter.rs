@@ -108,11 +108,20 @@ impl CodexAdapter {
     pub fn create_session(&self, system_prompt: String) -> Result<String> {
         let id = self.next_id();
 
+        // Get current working directory
+        let cwd = std::env::current_dir()
+            .context("Failed to get current directory")?
+            .to_string_lossy()
+            .to_string();
+
         let request = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
             id,
             method: "session/new".to_string(),
             params: json!({
+                "cwd": cwd,
+                "mcpServers": [],  // No MCP servers for now
+                "mode": "bypassPermissions",  // Skip permission prompts
                 "systemPrompt": system_prompt,
             }),
         };
@@ -151,7 +160,12 @@ impl CodexAdapter {
             method: "session/prompt".to_string(),
             params: json!({
                 "sessionId": session_id,
-                "message": message,
+                "prompt": [
+                    {
+                        "type": "text",
+                        "text": message,
+                    }
+                ],
             }),
         };
 
@@ -166,8 +180,23 @@ impl CodexAdapter {
                 match method.as_str() {
                     "session/update" => {
                         if let Some(params) = response.params {
-                            if let Some(content) = params.get("content").and_then(|c| c.as_str()) {
-                                callback(StreamEvent::MessageChunk(content.to_string()));
+                            // Check the update type
+                            if let Some(update) = params.get("update") {
+                                if let Some(session_update) = update.get("sessionUpdate").and_then(|s| s.as_str()) {
+                                    match session_update {
+                                        "agent_message_chunk" => {
+                                            // Extract text from content.text
+                                            if let Some(text) = update.get("content")
+                                                .and_then(|c| c.get("text"))
+                                                .and_then(|t| t.as_str()) {
+                                                callback(StreamEvent::MessageChunk(text.to_string()));
+                                            }
+                                        }
+                                        _ => {
+                                            // Ignore other update types for now
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
