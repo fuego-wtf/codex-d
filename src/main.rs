@@ -205,20 +205,24 @@ impl CodexView {
                 };
 
                 let system_prompt = format!(
-                    "You are a developer psychologist practicing evidence-based conversational archaeology.\n\n\
-                     ## MANDATORY FIRST STEPS - DO THIS BEFORE ANY RESPONSE\n\n\
-                     **CRITICAL: You MUST call these tools IN THIS EXACT ORDER before replying to the user:**\n\n\
-                     1. `start_session(repo_path)` - Create scan session (use: \"{}\") - **SAVE THE SESSION_ID FROM RESPONSE**\n\
-                     2. `set_repository(repo_path)` - Set the repository to analyze (use: \"{}\")\n\
-                     3. `get_repo_context()` - Get scan history and recurring issues\n\
-                     4. `analyze_commit_patterns(limit=50)` - Analyze commit behavior\n\
-                     5. `analyze_message_language(limit=50)` - Detect defensive language\n\
-                     6. `run_aikido_security_scan(repo_path)` - Run security vulnerability scan\n\
-                     7. `DEEPWIKI_BOH8VT8Z__ASK_QUESTION(question)` - Ask about the codebase structure\n\
-                     8. `save_scan_results(session_id, git_analysis, security_analysis)` - Persist all findings\n\n\
-                     **DO NOT skip these steps. DO NOT ask permission. DO NOT respond conversationally until ALL 8 tools have been called.**\n\n\
-                     ## GIT COMMIT PATTERNS (from {} commits analyzed, severity {:.1}/1.0)\n\n\
-                     {}\n\n\
+                    "# MANDATORY CHECKLIST - Execute ALL in exact order:\n\n\
+                     **Session Setup:**\n\
+                     1. start_session(\"{}\") → SAVE session_id variable\n\
+                     2. set_repository(\"{}\")\n\n\
+                     **Git Behavioral Analysis:**\n\
+                     3. analyze_commit_patterns(50)\n\
+                     4. analyze_message_language(50)\n\
+                     5. compare_message_vs_diff(20)\n\
+                     6. get_temporal_patterns(30)\n\n\
+                     **Security & Context:**\n\
+                     7. run_aikido_security_scan(\"{}\", \"graphyn-desktop-gpui\", \"code,dependencies,secrets\") ← CRITICAL\n\
+                     8. DEEPWIKI_BOH8VT8Z__ASK_QUESTION(\"What is the overall architecture and main security concerns?\") ← via gate22\n\
+                     9. query_codex_context(\"GPUI security patterns and Rust safety\") ← Kontext vault\n\n\
+                     **Save & Report:**\n\
+                     10. save_analysis_to_kontext(session_id, analysis_summary_json, \"{}\")\n\
+                     11. Report complete findings with specific numbers from ALL tools\n\n\
+                     🚨 Execute ALL 11 steps before responding. No shortcuts. If any step fails, report error immediately.\n\n\
+                     Git patterns ({} commits, severity {:.1}):\n{}\n\n\
                      ## MCP TOOLS AVAILABLE\n\n\
                      **Core Analysis Tools (codex-psychology server):**\n\
                      - `set_repository(repo_path)` - Set the repo to analyze\n\
@@ -274,6 +278,8 @@ impl CodexView {
                      - Be conversational and empathetic - therapist, not linter\n\
                      - Each question should make them think deeper about their project\n\n\
                      **Your goal: Guide them to insights they'd never find alone. Make them WANT to share more about their project.**",
+                    repo_path,
+                    repo_path,
                     repo_path,
                     repo_path,
                     analysis.total_commits_analyzed,
@@ -407,7 +413,7 @@ impl CodexView {
 
     fn auto_prime_agent(&mut self, cx: &mut Context<Self>) {
         // Automatically send initial message to trigger mandatory tool calls
-        let priming_message = "Begin analysis. Please run all mandatory tools.".to_string();
+        let priming_message = "Execute MANDATORY CHECKLIST: All 11 steps in exact order. Start with step 1 (start_session), save the session_id, then proceed sequentially. Do NOT skip steps 7 (Aikido), 8 (DeepWiki), or 9 (Kontext query). After all analysis tools complete, save results to Kontext in step 10, then report findings in step 11 with specific numbers.".to_string();
 
         eprintln!("[Auto-Prime] Sending priming message: {}", priming_message);
 
@@ -512,17 +518,17 @@ impl CodexView {
                         view.current_thought_buffer.clear();
                     }
 
-                    // Add tool calls to timeline
+                    // Convert completed tool calls to timeline
                     for (_id, (tool_call, output)) in view.active_tool_calls.drain() {
                         view.timeline_events.push(TimelineEvent::ToolCall {
-                            tool_call_id: tool_call.tool_call_id,
-                            title: tool_call.title,
-                            kind: tool_call.kind,
-                            status: tool_call.status,
-                            locations: tool_call.locations,
+                            tool_call_id: tool_call.tool_call_id.clone(),
+                            title: tool_call.title.clone(),
+                            kind: tool_call.kind.clone(),
+                            status: tool_call.status.clone(),
+                            locations: tool_call.locations.clone(),
                             output: if output.is_empty() { None } else { Some(output) },
                             timestamp: now,
-                            mcp_server: tool_call.mcp_server,
+                            mcp_server: tool_call.mcp_server.clone(),
                             routed_via: None,
                         });
                     }
@@ -674,18 +680,18 @@ impl CodexView {
                         view.current_thought_buffer.clear();
                     }
 
-                    // Add tool calls to timeline
+                    // Convert completed tool calls to timeline
                     for (_id, (tool_call, output)) in view.active_tool_calls.drain() {
                         view.timeline_events.push(TimelineEvent::ToolCall {
-                            tool_call_id: tool_call.tool_call_id,
-                            title: tool_call.title,
-                            kind: tool_call.kind,
-                            status: tool_call.status,
-                            locations: tool_call.locations,
+                            tool_call_id: tool_call.tool_call_id.clone(),
+                            title: tool_call.title.clone(),
+                            kind: tool_call.kind.clone(),
+                            status: tool_call.status.clone(),
+                            locations: tool_call.locations.clone(),
                             output: if output.is_empty() { None } else { Some(output) },
                             timestamp: now,
-                            mcp_server: tool_call.mcp_server,
-                            routed_via: None, // TODO: Add gateway routing logic
+                            mcp_server: tool_call.mcp_server.clone(),
+                            routed_via: None,
                         });
                     }
 
@@ -1161,6 +1167,7 @@ impl CodexView {
                             .when(!self.current_message_buffer.is_empty(), |parent| {
                                 parent.child(render_streaming_message(&self.current_message_buffer))
                             })
+                            // Show active tool calls (streaming)
                             .children(self.active_tool_calls.iter().map(|(_, (tool_call, output))| {
                                 render_streaming_tool_call(tool_call, output)
                             }))

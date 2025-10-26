@@ -117,6 +117,10 @@ pub struct ToolCallUpdateEvent {
     pub tool_call_id: String,
     pub content: Option<String>,
     pub status: Option<ToolCallStatus>,
+    /// Progress percentage (0.0 to 1.0) for long-running operations
+    pub progress: Option<f32>,
+    /// Human-readable progress message (e.g., "Scanning file 5 of 10...")
+    pub progress_message: Option<String>,
 }
 
 // ============================================================================

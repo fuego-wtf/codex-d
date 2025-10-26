@@ -1,57 +1,109 @@
-# codex'd
+# Codex-D
 
-**Evidence-Based Psychological Archaeology Through Git Forensics**
+**360° Developer Psychology Analysis: Where Mental Health Meets Code Quality**
 
-> "A developer therapist that traces your error loops through commit history."
+> Your code already tells your story—we just help you listen.
 
-## What is codex'd?
+## Demo
 
-codex'd conducts **psychological archaeology** on your git repository—analyzing commit patterns to detect poorly designed workflows, error loops, and behavioral blindspots. It's not code review, it's **pattern-to-insight forensics** that builds evidence-based narratives about your development psychology:
+🌐 **Live Demo**: [https://codexd.lovable.app/](https://codexd.lovable.app/)
 
-- **Error loops**: Refactoring the same code every two weeks but never fixing root causes
-- **Avoidance behaviors**: 62% of your codebase untouched while you batch-commit on weekends
-- **Workflow anti-patterns**: Massive commits (>200 lines) that treat git as backup, not practice
-- **Identity gaps**: What your README claims vs. what your commit history reveals
+## What is Codex-D?
 
-## How It Works (4-Phase Enrichment Architecture)
+Codex-D analyzes git repositories to reveal hidden patterns in developer behavior and code quality. It examines commit patterns, message language, and temporal coding habits to detect burnout signals, stress indicators, and how mental state correlates with security vulnerabilities.
 
-```
-Phase 1: Enrichment → Phase 2: Synthesis → Phase 3: Streaming → Phase 4: Storage
-```
+Using **22 orchestrated MCP tools**, it runs behavioral analysis, Aikido security scans, and pulls architecture context from DeepWiki—now fully observable through **ACI.dev** for transparent agent execution. All insights are stored in private Kontext vaults.
 
-**Phase 1: Parallel Context Gathering**
-- **Git Analyzer**: Scans commits for behavioral patterns (refactoring frequency, commit sizes, file avoidance)
-- **Kontext.dev API**: Extracts developer persona (commit style, README claims, stated priorities) *(coming soon)*
-- **Aikido Scanner**: Detects security blindspots (auth vulnerabilities, injection risks) *(coming soon)*
+Built with **Rust + GPUI** for native desktop performance, it leverages Agent Client Protocol's adapter (ACI.dev) to route through Codex CLI with personal OpenAI accounts (zero API costs).
 
-**Phase 2: Evidence-Based Synthesis**
-- Codex receives enriched context from all three sources
-- Builds narrative: Evidence → Behavior → Error Loop → Blindspot → Question
-- Generates ONE devastating observation grounded in specific metrics
+**The result**: A 360° analysis connecting developer wellbeing with code quality, making the relationship between mental health and software security visible, measurable, and actionable.
 
-**Phase 3: Real-Time Streaming**
-- FastMCP server streams observation via SSE
-- UI displays evidence-based narrative as it's generated
-- No code review, no suggestions—just psychological archaeology
+## Key Features
 
-**Phase 4: Longitudinal Tracking**
-- Saves observation to SQLite with timestamp
-- Future sessions can reference: "Three months ago you had refactoring loops, now you have security blindspots"
-- Tracks whether patterns persist or evolve
+### 🧠 Behavioral Pattern Detection
+- **Commit Patterns**: Detect anxiety, avoidance, and commitment issues through commit frequency and size
+- **Message Language**: Identify minimizing ("just", "quick"), defensive ("fix", "oops"), and perfectionist language
+- **Temporal Analysis**: Track late-night commits, weekend work patterns, and burst coding sessions
+- **Self-Deception Detection**: Compare commit messages vs actual changes to reveal downplaying and vagueness
 
-## Quick Start
+### 🛡️ Security Integration
+- **Aikido Security Scans**: Docker-based SAST, secret detection, dependency analysis, and IaC scanning
+- **Vulnerability Correlation**: Connect developer stress patterns with security findings
+- **Fix Tracking**: Monitor remediation attempts and recurring security issues
+
+### 📚 Architecture Intelligence
+- **DeepWiki Integration**: Pull codebase architecture and context via gate22 gateway
+- **Kontext Vault Storage**: Persist all analysis results in private encrypted vaults
+- **Session History**: Track behavioral patterns and security trends across multiple scans
+
+### 🔍 Full Observability
+- **ACI.dev Transparency**: Every agent action visible through Agent Client Protocol adapter
+- **Tool Call Cards**: Clean, collapsible UI showing MCP tool execution in real-time
+- **Timeline View**: Chronological display of thoughts, tool calls, and findings
+
+## Architecture
+
+### 22 MCP Tools Orchestrated
+
+**Behavioral Analysis (codex-psychology server):**
+- `analyze_commit_patterns()` - Detect commitment and anxiety patterns
+- `analyze_message_language()` - Identify linguistic patterns revealing mental state
+- `compare_message_vs_diff()` - Find self-deception in commit messages
+- `get_temporal_patterns()` - Analyze coding time patterns for stress indicators
+- `flag_behavioral_pattern()` - Track recurring behavioral issues
+
+**Security Scanning (codex-psychology server):**
+- `run_aikido_security_scan()` - Docker-based comprehensive security analysis
+- `save_security_issue()` - Persist vulnerability findings
+- `generate_fix_prompt()` - Create actionable remediation instructions
+
+**Session Management (codex-psychology server):**
+- `start_session()` - Create roasting scan session
+- `close_session()` - Clean up incomplete sessions
+- `submit_discovery_answers()` - Save user self-assessment
+- `save_scan_results()` - Complete and persist session
+- `get_scan_history()` - View past analysis sessions
+
+**Context Storage (codex-psychology server via Kontext):**
+- `upload_project_to_kontext()` - Upload documentation to vault
+- `query_codex_context()` - Search stored project context
+- `save_analysis_to_kontext()` - Persist analysis results
+- `get_codex_system_prompt()` - Get comprehensive system context
+
+**Architecture Intelligence (gate22 gateway → DeepWiki):**
+- `DEEPWIKI_BOH8VT8Z__READ_WIKI_STRUCTURE()` - Get documentation structure
+- `DEEPWIKI_BOH8VT8Z__READ_WIKI_CONTENTS()` - Read specific docs
+- `DEEPWIKI_BOH8VT8Z__ASK_QUESTION()` - Query codebase architecture
+
+**Repository Context (codex-psychology server):**
+- `set_repository()` - Initialize repo for analysis
+- `get_repo_context()` - Get longitudinal history and patterns
+- `get_project_summary()` - Overview of repo structure and activity
+
+### Tech Stack
+
+- **UI**: Rust + GPUI (GPU-accelerated native macOS desktop)
+- **Agent Protocol**: Agent Client Protocol via ACI.dev adapter
+- **MCP Servers**: FastMCP (Python) for psychology tools
+- **Security**: Aikido local scanner via Docker
+- **Storage**: SQLite (local) + Kontext vaults (cloud encrypted)
+- **LLM**: OpenAI via personal account (zero API costs)
+- **Observability**: Full agent transparency via ACI.dev
+
+## Installation
 
 ### Prerequisites
 
 - macOS (GPUI native app)
-- [Codex](https://codex.com) account (uses your existing authentication)
-- Rust toolchain (for building)
+- [Codex CLI](https://agentclientprotocol.com/) installed
+- Docker Desktop (for Aikido security scans)
+- Rust toolchain
 
-### Installation
+### Setup
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/fuego-wtf/codex-d.git
 cd codex-d
 
 # Initialize submodules
@@ -62,6 +114,11 @@ cd codex-acp
 cargo build --release
 cd ..
 
+# Install Python dependencies for MCP server
+cd mcp-servers/mcp_codex_psychology
+pip install -r requirements.txt
+cd ../..
+
 # Build codex-d
 cargo build --release
 
@@ -69,168 +126,154 @@ cargo build --release
 cargo run --release
 ```
 
-### First Analysis
+### Environment Variables
 
-1. Launch the app
-2. Select a git repository
-3. Click "Analyze"
-4. Read your observation
+Create `.env` in `mcp-servers/mcp_codex_psychology/`:
 
-## Architecture
-
-**Ultra-lean MVP:**
-- Git pattern detection (local, no API)
-- [Codex ACP](https://agentclientprotocol.com/llms.txt) integration (uses your auth)
-- [GPUI](https://github.com/zed-industries/zed) native macOS app with [gpui-component](https://longbridge.github.io/gpui-component/llms.txt) UI library
-- SQLite for observation history
-- **~720 lines of Rust**
-
-### Stack References
-
-**UI Components:**
-- [GPUI Component Library](https://longbridge.github.io/gpui-component/llms.txt) - TextInput, Button, Scrollable, and other UI components
-- [GPUI Framework](https://github.com/zed-industries/zed/tree/main/crates/gpui) - GPU-accelerated native UI framework
-
-**AI Integration:**
-- [Agent Client Protocol (ACP)](https://agentclientprotocol.com/llms.txt) - Protocol specification for AI agent communication
-- [codex-acp](https://github.com/zed-industries/codex-acp) - ACP client implementation for Codex
-- [Codex Documentation](https://github.com/openai/codex/tree/main/docs) - Codex AI platform docs
-
-### Component Usage
-
-**UI Components (from gpui-component):**
-- `TextInput` - Single-line text input with built-in state management
-- `Button` - Clickable button with variants (primary, ghost, etc.)
-- `Scrollable` - Scrollable container with custom scrollbars
-- `Root` - Required wrapper component for gpui-component apps
-
-**State Management:**
-- `InputState` - Manages text input state (text, selection, history)
-- `Entity<T>` - GPUI entity for reactive state
-- `Context<T>` - Component context for updates and notifications
-
-**Example:**
-```rust
-// Create input state
-let input_state = cx.new(|cx| InputState::new(window, cx));
-
-// Render input with button
-TextInput::new(&input_state).w(px(350.0))
-Button::new("my-button").label("Click Me").primary()
-```
-
-## Environment Variables
-
-**None required!** Codex authentication is handled by codex-acp automatically.
-
-Optional:
 ```bash
-CODEXD_DB_PATH=/custom/path/observations.db  # Default: ~/.local/share/codex-d/observations.db
-RUST_LOG=debug                               # Default: info
+# Aikido Security (required for security scans)
+AIKIDO_API_KEY=your_aikido_api_key
+
+# Kontext (required for vault storage)
+KONTEXT_API_KEY=your_kontext_api_key
+KONTEXT_ORG_ID=your_org_id
+KONTEXT_DEVELOPER_ID=your_developer_id
 ```
 
-## Developer Guide
+## Usage
 
-### Application Flow
+### 11-Step Mandatory Analysis Workflow
 
-codex'd uses a **3-page state machine** architecture:
+1. **Session Setup**: Create scan session and set repository
+2. **Behavioral Analysis**: Run 4 git pattern detections (patterns, language, diff, temporal)
+3. **Security Scan**: Execute Aikido Docker scan for vulnerabilities
+4. **Architecture Query**: Pull codebase context from DeepWiki
+5. **Context Search**: Query Kontext vault for relevant documentation
+6. **Save Results**: Persist complete analysis to Kontext vault
+7. **Report Findings**: Present comprehensive 360° analysis
 
-```
-AwaitingRepoSelection → Enriching → ChatActive
-```
-
-**Page 1: Repository Selection**
-- User enters repository path via `TextInput` or clicks "Browse Folders" `Button`
-- On submit: validate `.git` folder exists
-- Transition to Enriching state
-
-**Page 2: Enrichment**
-- Run `GitAnalyzer::analyze()` asynchronously (using `tokio::task::spawn_blocking`)
-- Stream progress updates via `LifecycleEvent`
-- Initialize `CodexAdapter` with system prompt from git analysis
-- Transition to ChatActive state
-
-**Page 3: Chat Interface**
-- User sends messages via `TextInput` + "Send" `Button`
-- Messages saved to SQLite via `Storage`
-- Stream Codex responses via `CodexAdapter::send_message()`
-- Display lifecycle events (tool calls, permissions) in timeline
-
-### Key Implementation Patterns
-
-**Async Git Analysis:**
-```rust
-// Git2 is blocking, so we use spawn_blocking
-let analysis = tokio::task::spawn_blocking(move || {
-    GitAnalyzer::analyze_blocking(&repo_path)
-}).await?;
-```
-
-**Codex Streaming:**
-```rust
-adapter.send_message(user_message, |event| {
-    match event {
-        StreamEvent::MessageChunk(text) => {
-            // Append to assistant message
-        }
-        StreamEvent::LifecycleEvent(event) => {
-            // Show tool usage
-        }
-    }
-})?;
-```
-
-**Component State Updates:**
-```rust
-// Reading input text
-let content = self.input_state.read(cx).text().to_string();
-
-// Clearing input
-self.input_state.update(cx, |state, cx| {
-    state.set_value("", window, cx);
-});
-```
-
-## Example Observation (Evidence-Based Narrative)
+### Example Analysis Output
 
 ```
-Your commit history shows 80% of your work happens on weekends with massive
-batch commits averaging 461 lines. Yet 62% of your codebase—including critical
-files like cli.ts, merger.ts, and sync.ts—hasn't been touched in your last
-10 commits. You're batch-saving work on weekends while avoiding the complex
-areas that actually need attention during the week. What are you protecting
-yourself from by only working when no one else is watching?
+## Behavioral Patterns Detected
+
+**Stress Indicators:**
+- 47 commits (62%) made between 10pm-2am
+- Average commit size: 461 lines (indicates batch work)
+- 12 commits with minimizing language ("just", "quick fix")
+
+**Avoidance Patterns:**
+- 62% of codebase untouched in last 50 commits
+- Critical files (auth.rs, db.rs) avoided for 3 weeks
+- Vague messages on significant changes (8 occurrences)
+
+## Security Findings (Aikido)
+
+**Critical Issues: 3**
+- Hardcoded secret in config.rs:42
+- SQL injection vulnerability in query.rs:156
+- Unvalidated user input in api.rs:89
+
+**Correlation:**
+Late-night commits (stressed state) show 2.3x higher vulnerability rate
+compared to daytime commits.
+
+## Recommendations
+
+1. Address sleep schedule: 62% night commits suggests burnout risk
+2. Refactor avoided files: Technical debt accumulating in core modules
+3. Fix security issues: All 3 critical issues in late-night commit batches
+4. Implement pre-commit security hooks to catch issues before commit
 ```
 
-**Narrative Structure:**
-1. **Evidence**: "80% weekend commits, 461 lines average" (specific metrics)
-2. **Behavior**: "Yet 62% untouched—cli.ts, merger.ts, sync.ts" (file-level avoidance)
-3. **Error Loop**: "Batch-saving on weekends while avoiding complex areas" (pattern identified)
-4. **Blindspot**: "Only working when no one else is watching" (psychological insight)
-5. **Question**: Forces reflection on the protective behavior
+## Development
 
-## Project Status
+### Project Structure
 
-**Phase 1 (MVP):** In Progress
-- [x] Project setup
-- [x] Type system (AppState, Message, StreamEvent, LifecycleEvent)
-- [x] Git analyzer (async pattern detection with spawn_blocking)
-- [x] Codex adapter (JSON-RPC client for codex-acp subprocess)
-- [x] SQLite storage (conversation persistence)
-- [x] GPUI UI (3-page state machine with gpui-component)
-  - [x] Page 1: Repository selection (TextInput + Button)
-  - [x] Page 2: Enrichment progress
-  - [x] Page 3: Chat interface (TextInput + Button + Messages)
-- [ ] Wire up functionality
-  - [ ] File picker integration
-  - [ ] Git analyzer → enrichment flow
-  - [ ] Codex streaming responses
-- [ ] End-to-end test
+```
+codex-d/
+├── src/
+│   ├── main.rs              # GPUI app entry + UI
+│   ├── types.rs             # Core data types
+│   ├── git_analyzer.rs      # Git pattern detection
+│   ├── codex_adapter.rs     # ACP client
+│   ├── storage.rs           # SQLite persistence
+│   └── ui/
+│       ├── components.rs    # Reusable UI components
+│       └── timeline.rs      # Timeline view
+├── mcp-servers/
+│   └── mcp_codex_psychology/
+│       └── mcp_server/
+│           ├── server.py            # FastMCP tools
+│           ├── database.py          # SQLite schema
+│           └── aikido_integration.py # Docker scanner
+└── codex-acp/               # Agent Client Protocol submodule
+```
 
-## Related MCP Resources
+### Architecture Flow
 
-- [MCP Kontext Server](https://docs.kontext.dev/mcp/kontext.md): Hosted Kontext MCP server https://docs.kontext.dev/llms.txt
+```
+┌─────────────┐
+│  GPUI UI    │  User selects repo
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────┐
+│ Git Analyzer    │  Scan commit patterns
+└──────┬──────────┘
+       │
+       ▼
+┌─────────────────┐
+│ Codex Adapter   │  Send to ACP via ACI.dev
+└──────┬──────────┘
+       │
+       ▼
+┌─────────────────────────┐
+│ MCP Psychology Server   │  22 tools orchestrated
+│  ├─ Behavioral Analysis │
+│  ├─ Aikido Scanner      │  (Docker)
+│  ├─ DeepWiki Query      │  (via gate22)
+│  └─ Kontext Storage     │  (vault)
+└──────┬──────────────────┘
+       │
+       ▼
+┌─────────────────┐
+│ Timeline UI     │  Display results with tool visibility
+└─────────────────┘
+```
+
+## Partner Technologies Used
+
+- ✅ **OpenAI** - Via personal account through Agent Client Protocol
+- ✅ **ACI.dev** - Agent Client Protocol adapter + DeepWiki observability
+- ✅ **Lovable** - Demo site at [https://codexd.lovable.app/](https://codexd.lovable.app/)
+- ✅ **Kontext.dev** - Private vault storage for analysis results
+- ✅ **Aikido Security** - Docker-based vulnerability scanning
+
+## Contributing
+
+Contributions welcome! This is an open-source project exploring the intersection of developer wellbeing and code quality.
+
+### Areas for Contribution
+
+- Additional behavioral pattern detectors
+- More security scanner integrations
+- Linux/Windows GPUI support
+- Additional MCP tool integrations
+- Improved timeline UI/UX
 
 ## License
 
 MIT
+
+## Acknowledgments
+
+- [GPUI](https://github.com/zed-industries/zed) - Native UI framework
+- [Agent Client Protocol](https://agentclientprotocol.com/) - Agent communication standard
+- [FastMCP](https://github.com/jlowin/fastmcp) - MCP server framework
+- [Aikido Security](https://www.aikido.dev/) - Security scanning platform
+- [Kontext.dev](https://kontext.dev/) - Knowledge vault platform
+
+---
+
+**Built for the intersection of developer psychology and code quality.**

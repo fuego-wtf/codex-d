@@ -155,7 +155,12 @@ impl CodexAdapter {
                 "name": "codex-psychology",
                 "type": "http",
                 "url": "http://127.0.0.1:52848/mcp",
-                "headers": []
+                "headers": [
+                    {
+                        "name": "Accept",
+                        "value": "application/json, text/event-stream"
+                    }
+                ]
             },
             {
                 "name": "deepwiki",
@@ -425,10 +430,22 @@ impl CodexAdapter {
                                                     }
                                                 });
 
+                                                // Extract progress information if available
+                                                let progress = update.get("progress")
+                                                    .and_then(|p| p.as_f64())
+                                                    .map(|p| p as f32);
+
+                                                let progress_message = update.get("progressMessage")
+                                                    .or_else(|| update.get("progress_message"))
+                                                    .and_then(|m| m.as_str())
+                                                    .map(|s| s.to_string());
+
                                                 callback(StreamEvent::ToolCallUpdate(ToolCallUpdateEvent {
                                                     tool_call_id: tool_call_id.to_string(),
                                                     content,
                                                     status,
+                                                    progress,
+                                                    progress_message,
                                                 }));
                                             }
                                         }

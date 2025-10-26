@@ -662,6 +662,36 @@ def start_session(repo_path: str) -> str:
 
 
 @mcp.tool()
+def close_session(session_id: int) -> str:
+    """
+    Close/abort an existing scan session without saving results.
+
+    Args:
+        session_id: The scan session ID to close
+
+    Returns:
+        JSON string with status
+
+    🤖 CODEX: Call this to close incomplete sessions before starting a new analysis.
+    Use when you want to clean up without saving results.
+    """
+    try:
+        # Mark session as completed with 0 issues and 0 duration
+        db.complete_scan_session(session_id, total_issues=0, duration_ms=0)
+
+        return json.dumps({
+            "status": "success",
+            "session_id": session_id,
+            "message": f"Session {session_id} closed successfully."
+        })
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to close session: {str(e)}"
+        })
+
+
+@mcp.tool()
 def submit_discovery_answers(session_id: int, rating: int, potential: str, reasoning: str) -> str:
     """
     Save user's discovery answers for a scan session.
@@ -1043,20 +1073,25 @@ def flag_behavioral_pattern(session_id: int, pattern_name: str, evidence: str, s
 @mcp.tool()
 async def run_aikido_security_scan(
     repo_path: Optional[str] = None,
+    repository_name: Optional[str] = None,
     scan_types: Optional[Union[str, List[str]]] = None
 ) -> str:
     """
     Run Aikido Security scan on the repository to detect vulnerabilities.
 
     Integrates with Aikido Security platform to scan for:
-    - SAST (Static Application Security Testing) vulnerabilities
+    - Code analysis (SAST - Static Application Security Testing)
     - Exposed secrets and credentials
     - Vulnerable dependencies
-    - Security misconfigurations
+    - Infrastructure as Code (IaC) misconfigurations
 
     Args:
         repo_path: Path to repository (defaults to current repo)
-        scan_types: List of scan types or comma-separated string (sast, secrets, dependencies)
+        repository_name: Repository name for Aikido (e.g., "graphyn-desktop-gpui")
+                        Defaults to basename of repo_path if not provided
+        scan_types: List of scan types or comma-separated string
+                   Options: code, secrets, dependencies, iac
+                   Default: code, secrets, dependencies
 
     Returns:
         JSON string with scan results
@@ -1078,13 +1113,17 @@ async def run_aikido_security_scan(
         elif scan_types:
             scan_types_list = scan_types
         else:
-            scan_types_list = ['sast', 'secrets', 'dependencies']  # Default
+            scan_types_list = ['code', 'secrets', 'dependencies']  # Default
 
         # Import Aikido integration
         from .aikido_integration import run_aikido_scan
 
         # Run the scan with scan types
-        scan_results = await run_aikido_scan(target_repo, scan_types=scan_types_list)
+        scan_results = await run_aikido_scan(
+            target_repo,
+            repository_name=repository_name,
+            scan_types=scan_types_list
+        )
 
         # Defensive: check if scan_results indicates error
         if isinstance(scan_results, dict) and scan_results.get("status") == "error":

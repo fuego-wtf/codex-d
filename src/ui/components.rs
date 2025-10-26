@@ -6,6 +6,73 @@ use gpui_component::v_flex;
 use crate::types::{TimelineEvent, ToolCallStatus, ToolCallEvent, McpServerType};
 
 // ============================================================================
+// Progress Bar Helper
+// ============================================================================
+
+/// Renders a horizontal progress bar with percentage and optional message
+pub fn render_progress_bar(progress: f32, message: Option<&str>) -> Div {
+    // Clamp progress between 0.0 and 1.0
+    let progress = progress.clamp(0.0, 1.0);
+    let percentage = (progress * 100.0) as u32;
+
+    // Color based on progress
+    let bar_color = if progress < 0.5 {
+        rgb(0xffa726) // Orange for < 50%
+    } else if progress < 0.9 {
+        rgb(0x42a5f5) // Blue for 50-90%
+    } else {
+        rgb(0x66bb6a) // Green for >= 90%
+    };
+
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .w_full()
+        // Progress message if present
+        .when_some(message, |container, msg| {
+            container.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(0x616161))
+                    .child(msg.to_string())
+            )
+        })
+        // Progress bar container
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .w_full()
+                // Bar background
+                .child(
+                    div()
+                        .flex_1()
+                        .h(px(8.0))
+                        .bg(rgb(0xe0e0e0))
+                        .rounded(px(4.0))
+                        .overflow_hidden()
+                        // Progress fill
+                        .child(
+                            div()
+                                .w(relative(progress))
+                                .h_full()
+                                .bg(bar_color)
+                        )
+                )
+                // Percentage text
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(rgb(0x424242))
+                        .child(format!("{}%", percentage))
+                )
+        )
+}
+
+// ============================================================================
 // Timeline Item Renderer
 // ============================================================================
 
@@ -57,7 +124,7 @@ pub fn render_user_message(content: &str) -> Div {
         .justify_end()
         .child(
             v_flex()
-                .max_w(rems(40.0))  // Changed from px(600) to rems for better responsiveness
+                .max_w(rems(40.0))
                 .px_3()
                 .py_2()
                 .bg(rgb(0xe8f2ff))
@@ -77,7 +144,7 @@ pub fn render_user_message(content: &str) -> Div {
                         .text_sm()
                         .text_color(rgb(0x212121))
                         .line_height(relative(1.5))
-                        .overflow_x_hidden()  // Prevent horizontal overflow
+                        .overflow_x_hidden()
                         .child(content.to_string())
                 )
         )
@@ -92,7 +159,7 @@ pub fn render_assistant_message(content: &str) -> Div {
         .justify_start()
         .child(
             v_flex()
-                .max_w(rems(40.0))  // Changed from px(600) to rems for better responsiveness
+                .max_w(rems(40.0))
                 .px_3()
                 .py_2()
                 .bg(rgb(0xf0f4f8))
@@ -112,7 +179,7 @@ pub fn render_assistant_message(content: &str) -> Div {
                         .text_sm()
                         .text_color(rgb(0x212121))
                         .line_height(relative(1.5))
-                        .overflow_x_hidden()  // Prevent horizontal overflow
+                        .overflow_x_hidden()
                         .child(content.to_string())
                 )
         )

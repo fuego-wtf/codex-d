@@ -125,6 +125,7 @@ class AikidoScanner:
     async def scan_repository(
         self,
         repo_path: str,
+        repository_name: Optional[str] = None,
         scan_types: Optional[List[str]] = None
     ) -> Dict:
         """
@@ -132,6 +133,7 @@ class AikidoScanner:
 
         Args:
             repo_path: Absolute path to repository to scan
+            repository_name: Repository name for Aikido (e.g., "graphyn-desktop-gpui")
             scan_types: Types of scans to run. Options:
                        - 'code' (SAST)
                        - 'secrets' (exposed credentials)
@@ -156,7 +158,26 @@ class AikidoScanner:
         if not os.path.isdir(repo_path):
             raise ValueError(f"Repository path is not a directory: {repo_path}")
 
+        # Extract repository name from path if not provided
+        if not repository_name:
+            repository_name = os.path.basename(repo_path)
+
+        # Auto-detect git branch
+        try:
+            branch_result = subprocess.run(
+                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            branch_name = branch_result.stdout.strip() if branch_result.returncode == 0 else 'main'
+        except Exception:
+            branch_name = 'main'  # Fallback to main
+
         print(f"[Aikido] Starting scan of {repo_path}")
+        print(f"[Aikido] Repository name: {repository_name}")
+        print(f"[Aikido] Branch name: {branch_name}")
         print(f"[Aikido] Scan types: {', '.join(scan_types)}")
 
         # Build Docker command
@@ -167,6 +188,8 @@ class AikidoScanner:
             '-e', f'AIKIDO_API_KEY={self.api_key}',
             self.SCANNER_IMAGE,
             'scan', '/code',
+            '--repositoryname', repository_name,
+            '--branchname', branch_name,
             '--scan-types', *scan_types,
             '--debug'
         ]
@@ -350,6 +373,7 @@ class AikidoScanner:
 
 async def run_aikido_scan(
     repo_path: str,
+    repository_name: Optional[str] = None,
     scan_types: Optional[List[str]] = None
 ) -> Dict:
     """
@@ -357,6 +381,7 @@ async def run_aikido_scan(
 
     Args:
         repo_path: Path to repository
+        repository_name: Repository name for Aikido (defaults to basename of repo_path)
         scan_types: Optional list of scan types to run
                    Options: 'code', 'secrets', 'dependencies', 'iac'
 
@@ -370,7 +395,7 @@ async def run_aikido_scan(
     """
     try:
         scanner = AikidoScanner()
-        return await scanner.scan_repository(repo_path, scan_types=scan_types)
+        return await scanner.scan_repository(repo_path, repository_name=repository_name, scan_types=scan_types)
     except DockerNotAvailableError as e:
         return {
             "status": "error",
