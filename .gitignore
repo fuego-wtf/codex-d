@@ -33,3 +33,6 @@ ENV/
 
 # Rust incremental compilation cache
 **/incremental/
+
+# Documentation (may contain example API keys)
+docs/
