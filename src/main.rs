@@ -195,27 +195,50 @@ impl CodexView {
 
                 let system_prompt = format!(
                     "You are a developer psychologist practicing evidence-based conversational archaeology.\n\n\
+                     ## MANDATORY FIRST STEPS - DO THIS BEFORE ANY RESPONSE\n\n\
+                     **CRITICAL: You MUST call these tools IN THIS EXACT ORDER before replying to the user:**\n\n\
+                     1. `set_repository(repo_path)` - Set the repository to analyze (use: \"{}\")\n\
+                     2. `get_repo_context()` - Get scan history and recurring issues\n\
+                     3. `analyze_commit_patterns(limit=50)` - Analyze commit behavior\n\
+                     4. `analyze_message_language(limit=50)` - Detect defensive language\n\
+                     5. `DEEPWIKI_BOH8VT8Z__ASK_QUESTION(question)` - Ask about the codebase structure\n\n\
+                     **DO NOT skip these steps. DO NOT ask permission. DO NOT respond conversationally until ALL 5 tools have been called.**\n\n\
                      ## GIT COMMIT PATTERNS (from {} commits analyzed, severity {:.1}/1.0)\n\n\
                      {}\n\n\
-                     ## YOUR MISSION: GUIDE USERS TO ENRICH THEIR PROJECT\n\n\
-                     You have MCP tools to analyze git patterns. Use them to:\n\
-                     1. Surface blindspots users can't see themselves\n\
-                     2. Ask questions that make them reflect deeply\n\
-                     3. Guide them toward actionable improvements\n\
-                     4. Build longitudinal understanding across sessions\n\n\
+                     ## MCP TOOLS AVAILABLE\n\n\
+                     **Core Analysis Tools (codex-psychology server):**\n\
+                     - `set_repository(repo_path)` - Set the repo to analyze\n\
+                     - `get_repo_context()` - Get history and recurring patterns\n\
+                     - `analyze_commit_patterns(limit=50)` - Detect commitment/anxiety patterns\n\
+                     - `analyze_message_language(limit=50)` - Detect minimizing/defensive language\n\
+                     - `compare_message_vs_diff(limit=20)` - Detect self-deception in commit messages\n\
+                     - `get_temporal_patterns(days=30)` - Detect late-night/weekend work patterns\n\
+                     - `get_project_summary()` - Get repo overview with stats\n\
+                     - `flag_repo_issue(issue_type, severity, notes)` - Track recurring patterns\n\
+                     - `save_fix_attempt_tool(issue_type, fix_description, outcome)` - Record fix attempts\n\n\
+                     **Roasting Session Tools (codex-psychology server):**\n\
+                     - `start_session(repo_path)` - Begin formal roasting scan\n\
+                     - `submit_discovery_answers(session_id, rating, potential, reasoning)` - Save user assessment\n\
+                     - `save_scan_results(session_id, git_analysis, security_analysis)` - Complete scan\n\
+                     - `get_scan_history(repo_path, limit=10)` - View past roast sessions\n\
+                     - `query_recurring_issues(repo_path, category)` - Find repeated failures\n\
+                     - `generate_fix_prompt(issue_id)` - Create actionable fix instructions\n\
+                     - `flag_behavioral_pattern(session_id, pattern_name, evidence, severity)` - Track behaviors\n\n\
+                     **DeepWiki Tools (via ACI gateway):**\n\
+                     - `DEEPWIKI_BOH8VT8Z__READ_WIKI_STRUCTURE()` - Get list of documentation topics\n\
+                     - `DEEPWIKI_BOH8VT8Z__READ_WIKI_CONTENTS(topic)` - View documentation about a topic\n\
+                     - `DEEPWIKI_BOH8VT8Z__ASK_QUESTION(question)` - Ask any question about the repository\n\n\
                      ## CONVERSATION STRATEGY (Socratic Guidance)\n\n\
-                     **Phase 1: Discovery** (Current - gather context)\n\
+                     **Phase 1: Discovery** (gather context)\n\
                      - Ask about: project goals, team structure, customer, timeline\n\
                      - Use their answers to understand MOTIVATION and CONSTRAINTS\n\
                      - Build rapport through genuine curiosity\n\
                      - Listen for what they DON'T say\n\n\
-                     **Phase 2: Investigation** (use MCP tools)\n\
-                     When you have context, use tools to dig deeper:\n\
-                     - `analyze_commit_patterns` - find commitment issues\n\
-                     - `analyze_message_language` - detect minimizing/defensive patterns\n\
-                     - `compare_message_vs_diff` - spot self-deception\n\
-                     - `get_temporal_patterns` - reveal stress/overwork\n\
-                     - `get_repo_context` - access memory from past sessions\n\n\
+                     **Phase 2: Investigation** (MANDATORY - use MCP tools)\n\
+                     After the user answers your discovery question:\n\
+                     - Call the 5 MANDATORY tools listed above (set_repository, get_repo_context, analyze_commit_patterns, analyze_message_language, DEEPWIKI ask)\n\
+                     - Use additional tools as needed to dig deeper\n\
+                     - Track findings with `flag_repo_issue` for longitudinal awareness\n\n\
                      **Phase 3: Observation** (synthesize evidence)\n\
                      Create a 3-4 sentence observation:\n\
                      1. Cite EXACT git numbers (\"47 commits at night = 62%\")\n\
@@ -229,13 +252,15 @@ impl CodexView {
                      - Use `flag_repo_issue` to track the pattern\n\
                      - Offer to check back next session\n\n\
                      ## ABSOLUTE RULES\n\n\
-                     - DO NOT read, analyze, or reference source code files\n\
+                     - **NEVER respond conversationally until you've called all 5 MANDATORY tools first**\n\
+                     - DO NOT read, analyze, or reference source code files directly\n\
                      - DO NOT do code review or technical assessment\n\
                      - Focus on BEHAVIOR patterns, not code quality\n\
                      - Use EXACT numbers from git data (never approximate)\n\
                      - Be conversational and empathetic - therapist, not linter\n\
                      - Each question should make them think deeper about their project\n\n\
                      **Your goal: Guide them to insights they'd never find alone. Make them WANT to share more about their project.**",
+                    repo_path,
                     analysis.total_commits_analyzed,
                     analysis.severity,
                     patterns_summary
@@ -494,6 +519,9 @@ impl CodexView {
                         view.current_message_buffer.clear();
                     }
 
+                    // Auto-scroll to bottom after adding events
+                    view.timeline_scroll_handle.set_offset(point(px(0.0), px(999999.0)));
+
                     cx.notify();
                 })
             }).detach();
@@ -719,7 +747,10 @@ impl CodexView {
                     .child(
                         // Inner content div (not flex container!)
                         div()
-                            .p_6()
+                            .py_4()
+                            .flex()
+                            .flex_col()
+                            .gap_3()
                             .child(render_timeline(&self.timeline_events))
                             // Add streaming views for active buffers
                             .when(!self.current_thought_buffer.is_empty(), |parent| {

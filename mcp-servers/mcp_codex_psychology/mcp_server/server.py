@@ -582,6 +582,448 @@ def save_fix_attempt_tool(issue_type: str, fix_description: str, outcome: str = 
         })
 
 
+# === ROASTING TOOLS ===
+
+@mcp.tool()
+def start_session(repo_path: str) -> str:
+    """
+    Create a new scan session for roasting analysis.
+
+    Args:
+        repo_path: Absolute path to the git repository
+
+    Returns:
+        JSON string with session_id and discovery questions
+
+    CODEX: Call this to begin a new roasting scan. Returns session ID and
+    prompts user with discovery questions about their code quality rating.
+    """
+    repo_path_obj = Path(repo_path)
+    if not repo_path_obj.exists():
+        return json.dumps({
+            "status": "error",
+            "message": f"Repository path does not exist: {repo_path}"
+        })
+
+    if not (repo_path_obj / ".git").exists():
+        return json.dumps({
+            "status": "error",
+            "message": f"Not a git repository: {repo_path}"
+        })
+
+    try:
+        # Check for existing incomplete sessions
+        history = db.get_scan_history(repo_path, limit=1)
+        if history and history[0].get('completed_at') is None:
+            return json.dumps({
+                "status": "warning",
+                "message": "An incomplete scan session exists. Complete it first or start a new one.",
+                "existing_session_id": history[0]['id']
+            })
+
+        # Create new session
+        session_id = db.create_scan_session(repo_path)
+
+        # Prepare discovery questions
+        discovery_questions = [
+            "On a scale of 1-10, how would you rate the overall quality of this codebase?",
+            "What do you think is the biggest potential of this project?",
+            "What concerns do you have about the code, if any?"
+        ]
+
+        return json.dumps({
+            "status": "success",
+            "session_id": session_id,
+            "repo_path": repo_path,
+            "discovery_questions": discovery_questions,
+            "message": "Scan session created. Please answer the discovery questions."
+        })
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to create scan session: {str(e)}"
+        })
+
+
+@mcp.tool()
+def submit_discovery_answers(session_id: int, rating: int, potential: str, reasoning: str) -> str:
+    """
+    Save user's discovery answers for a scan session.
+
+    Args:
+        session_id: The scan session ID
+        rating: User's quality rating (1-10)
+        potential: User's answer about project potential
+        reasoning: User's reasoning about concerns
+
+    Returns:
+        JSON string with confirmation
+
+    CODEX: Call this after user answers discovery questions. Stores their
+    self-assessment for later comparison with actual findings.
+    """
+    try:
+        # Note: Discovery answers are stored in the session metadata
+        # For now, we'll track this as a behavioral pattern
+        evidence = f"User rated code quality: {rating}/10. Potential: {potential}. Concerns: {reasoning}"
+
+        db.flag_behavioral_pattern(
+            session_id=session_id,
+            pattern_name="user_self_assessment",
+            evidence=evidence,
+            severity="info"
+        )
+
+        return json.dumps({
+            "status": "success",
+            "session_id": session_id,
+            "message": "Discovery answers saved. Proceed with git and security analysis."
+        })
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to save discovery answers: {str(e)}"
+        })
+
+
+@mcp.tool()
+def save_scan_results(session_id: int, git_analysis: str, security_analysis: str) -> str:
+    """
+    Save complete scan results and mark session as completed.
+
+    Args:
+        session_id: The scan session ID
+        git_analysis: JSON string of git pattern analysis results
+        security_analysis: JSON string of Aikido security scan results
+
+    Returns:
+        JSON string with summary
+
+    CODEX: Call this after completing git pattern analysis and Aikido security scan.
+    Saves all findings and completes the session.
+    """
+    try:
+        start_time = datetime.now()
+
+        # Parse git analysis
+        git_data = json.loads(git_analysis) if isinstance(git_analysis, str) else git_analysis
+
+        # Save git patterns
+        if git_data.get('patterns'):
+            for pattern_type, detected in git_data['patterns'].items():
+                if detected:
+                    db.save_git_pattern(
+                        session_id=session_id,
+                        pattern_type=pattern_type
+                    )
+
+        # Save individual commit patterns if available
+        if git_data.get('commits'):
+            for commit in git_data['commits'][:10]:  # Limit to top 10
+                db.save_git_pattern(
+                    session_id=session_id,
+                    pattern_type="notable_commit",
+                    commit_sha=commit.get('sha', ''),
+                    commit_message=commit.get('message', ''),
+                    lines_changed=commit.get('lines_changed', 0)
+                )
+
+        # Parse security analysis
+        security_data = json.loads(security_analysis) if isinstance(security_analysis, str) else security_analysis
+
+        # Save security issues
+        total_issues = 0
+        if security_data.get('issues'):
+            for issue in security_data['issues']:
+                db.save_security_issue(
+                    session_id=session_id,
+                    severity=issue.get('severity', 'unknown'),
+                    category=issue.get('category', 'uncategorized'),
+                    summary=issue.get('summary', ''),
+                    issue_url=issue.get('url', '')
+                )
+                total_issues += 1
+
+                # Track recurring issues
+                issue_signature = f"{issue.get('category', 'uncategorized')}:{issue.get('summary', '')[:100]}"
+                # Get repo_path from session
+                with db.get_db() as conn:
+                    session = conn.execute(
+                        "SELECT repo_path FROM scan_sessions WHERE id = ?",
+                        (session_id,)
+                    ).fetchone()
+                    if session:
+                        db.track_recurring_issue(session['repo_path'], issue_signature)
+
+        # Complete the session
+        duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+        db.complete_scan_session(session_id, total_issues, duration_ms)
+
+        return json.dumps({
+            "status": "success",
+            "session_id": session_id,
+            "total_git_patterns": len(git_data.get('patterns', {})),
+            "total_security_issues": total_issues,
+            "scan_duration_ms": duration_ms,
+            "message": "Scan results saved and session completed."
+        })
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to save scan results: {str(e)}"
+        })
+
+
+@mcp.tool()
+def get_scan_history(repo_path: str, limit: int = 10) -> str:
+    """
+    Get past scan sessions for a repository.
+
+    Args:
+        repo_path: Absolute path to the git repository
+        limit: Maximum number of scans to return (default: 10)
+
+    Returns:
+        Formatted string with scan history for LLM consumption
+
+    CODEX: Use this to see previous roasting sessions for this repo.
+    Shows timestamps, issue counts, and completion status.
+    """
+    try:
+        scans = db.get_scan_history(repo_path, limit)
+
+        if not scans:
+            return json.dumps({
+                "status": "success",
+                "message": "No previous scans found for this repository.",
+                "scans": []
+            })
+
+        # Format for LLM-friendly output
+        formatted_scans = []
+        for scan in scans:
+            formatted_scans.append({
+                "session_id": scan['id'],
+                "started_at": scan['started_at'],
+                "completed_at": scan['completed_at'] or "INCOMPLETE",
+                "total_issues": scan['total_issues'],
+                "scan_duration_ms": scan['scan_duration_ms']
+            })
+
+        return json.dumps({
+            "status": "success",
+            "repo_path": repo_path,
+            "total_scans": len(scans),
+            "scans": formatted_scans,
+            "message": f"Found {len(scans)} previous scan(s)"
+        })
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to get scan history: {str(e)}"
+        })
+
+
+@mcp.tool()
+def query_recurring_issues(repo_path: str, category: Optional[str] = None) -> str:
+    """
+    Find issues that appear across multiple scans.
+
+    Args:
+        repo_path: Absolute path to the git repository
+        category: Optional category filter (e.g., "security", "code_smell")
+
+    Returns:
+        Formatted string with recurring issues and occurrence counts
+
+    CODEX: Use this to identify patterns that keep appearing across scans.
+    These are the issues the developer keeps recreating - prime roasting material.
+    """
+    try:
+        recurring_issues = db.get_recurring_issues_for_repo(repo_path)
+
+        if not recurring_issues:
+            return json.dumps({
+                "status": "success",
+                "message": "No recurring issues found for this repository.",
+                "recurring_issues": []
+            })
+
+        # Filter by category if specified
+        if category:
+            recurring_issues = [
+                issue for issue in recurring_issues
+                if category.lower() in issue['issue_signature'].lower()
+            ]
+
+        # Format for LLM
+        formatted_issues = []
+        for issue in recurring_issues:
+            formatted_issues.append({
+                "issue_signature": issue['issue_signature'],
+                "occurrence_count": issue['occurrence_count'],
+                "first_seen": issue['first_seen'],
+                "last_seen": issue['last_seen'],
+                "persistence": f"Occurred {issue['occurrence_count']} times between {issue['first_seen']} and {issue['last_seen']}"
+            })
+
+        return json.dumps({
+            "status": "success",
+            "repo_path": repo_path,
+            "category_filter": category or "all",
+            "total_recurring_issues": len(formatted_issues),
+            "recurring_issues": formatted_issues,
+            "message": f"Found {len(formatted_issues)} recurring issue(s)"
+        })
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to query recurring issues: {str(e)}"
+        })
+
+
+@mcp.tool()
+def generate_fix_prompt(issue_id: int) -> str:
+    """
+    Generate an actionable fix prompt for a security issue.
+
+    Args:
+        issue_id: The security issue ID from the database
+
+    Returns:
+        Formatted fix prompt for sub-agent execution
+
+    CODEX: Use this to create fix prompts for security issues.
+    Returns structured prompt with context, steps, and prevention measures.
+    """
+    try:
+        with db.get_db() as conn:
+            # Get the security issue
+            issue = conn.execute(
+                """SELECT si.*, ss.repo_path, ss.repo_name
+                   FROM security_issues si
+                   JOIN scan_sessions ss ON si.session_id = ss.id
+                   WHERE si.id = ?""",
+                (issue_id,)
+            ).fetchone()
+
+            if not issue:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Security issue ID {issue_id} not found"
+                })
+
+            # Check if there are previous fix attempts
+            fix_attempts = conn.execute(
+                """SELECT fix_prompt, success, notes, attempted_at
+                   FROM fix_attempts_roasting
+                   WHERE issue_id = ?
+                   ORDER BY attempted_at DESC
+                   LIMIT 3""",
+                (issue_id,)
+            ).fetchall()
+
+        # Build fix prompt
+        fix_prompt = f"""# Security Issue Fix Request
+
+## Issue Details
+- **Severity**: {issue['severity']}
+- **Category**: {issue['category']}
+- **Summary**: {issue['summary']}
+- **Repository**: {issue['repo_path']}
+- **Issue URL**: {issue['issue_url'] or 'N/A'}
+
+## Your Task
+Fix the security issue described above in the repository at `{issue['repo_path']}`.
+
+## Steps
+1. Locate the vulnerable code related to: {issue['category']}
+2. Understand the security risk: {issue['summary']}
+3. Implement a secure fix following best practices
+4. Test the fix to ensure it resolves the issue without breaking functionality
+5. Document the change in your commit message
+
+## Prevention Measures
+After fixing, consider:
+- Adding tests to prevent regression
+- Checking for similar patterns elsewhere in the codebase
+- Updating documentation if security best practices changed
+"""
+
+        # Add context from previous attempts if any
+        if fix_attempts:
+            fix_prompt += "\n## Previous Fix Attempts\n"
+            for i, attempt in enumerate(fix_attempts, 1):
+                status = "SUCCESSFUL" if attempt['success'] else "FAILED"
+                fix_prompt += f"\n### Attempt {i} ({status})\n"
+                fix_prompt += f"- **When**: {attempt['attempted_at']}\n"
+                fix_prompt += f"- **Notes**: {attempt['notes']}\n"
+
+        return json.dumps({
+            "status": "success",
+            "issue_id": issue_id,
+            "fix_prompt": fix_prompt,
+            "severity": issue['severity'],
+            "category": issue['category']
+        })
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to generate fix prompt: {str(e)}"
+        })
+
+
+@mcp.tool()
+def flag_behavioral_pattern(session_id: int, pattern_name: str, evidence: str, severity: str = "medium") -> str:
+    """
+    Flag a behavioral pattern detected during analysis.
+
+    Args:
+        session_id: The scan session ID
+        pattern_name: Name of the pattern (e.g., "minimizing_language", "defensive_commits")
+        evidence: Evidence supporting this pattern
+        severity: Severity level (low, medium, high)
+
+    Returns:
+        JSON string with confirmation and occurrence count
+
+    CODEX: Use this to record behavioral patterns you detect in git analysis.
+    Auto-increments occurrence count if pattern was flagged before in this session.
+    """
+    try:
+        # Flag the pattern (this handles increment if exists)
+        db.flag_behavioral_pattern(
+            session_id=session_id,
+            pattern_name=pattern_name,
+            evidence=evidence,
+            severity=severity
+        )
+
+        # Get updated occurrence count
+        with db.get_db() as conn:
+            result = conn.execute(
+                """SELECT occurrence_count FROM behavioral_patterns
+                   WHERE session_id = ? AND pattern_name = ?""",
+                (session_id, pattern_name)
+            ).fetchone()
+
+            occurrence_count = result['occurrence_count'] if result else 1
+
+        return json.dumps({
+            "status": "success",
+            "session_id": session_id,
+            "pattern_name": pattern_name,
+            "occurrence_count": occurrence_count,
+            "severity": severity,
+            "message": f"Behavioral pattern '{pattern_name}' flagged. Occurrence #{occurrence_count} in this session."
+        })
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to flag behavioral pattern: {str(e)}"
+        })
+
+
 if __name__ == "__main__":
     # Run the MCP server
     mcp.run()

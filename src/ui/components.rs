@@ -1,6 +1,7 @@
 // Reusable UI components for codex-d
 use gpui::*;
 use gpui::prelude::*;
+use gpui_component::v_flex;
 
 use crate::types::{TimelineEvent, ToolCallStatus, ToolCallEvent, McpServerType};
 
@@ -33,25 +34,21 @@ pub fn render_timeline_event(event: &TimelineEvent) -> Div {
 // ============================================================================
 
 fn render_user_message(content: &str) -> Div {
-    let bg_user = rgb(0xe8f2ff);
-    let border_user = rgb(0x90caf9);
-
     div()
         .flex()
         .w_full()
+        .px_2()
         .justify_end()
         .child(
-            div()
+            v_flex()
                 .max_w(px(600.0))
-                .px_4()
-                .py_3()
-                .bg(bg_user)
+                .px_2()
+                .py_1()
+                .bg(rgb(0xe8f2ff))
                 .border_1()
-                .border_color(border_user)
-                .rounded_lg()
-                .flex()
-                .flex_col()
-                .gap_2()
+                .border_color(rgb(0x90caf9))
+                .rounded_md()
+                .gap_0p5()
                 .child(
                     div()
                         .text_xs()
@@ -63,31 +60,28 @@ fn render_user_message(content: &str) -> Div {
                     div()
                         .text_sm()
                         .text_color(rgb(0x212121))
-                        .line_height(relative(1.5))
+                        .line_height(relative(1.4))
                         .child(content.to_string())
                 )
         )
 }
 
 fn render_assistant_message(content: &str) -> Div {
-    let bg_assistant = rgb(0xf0f4f8);
-    let border_assistant = rgb(0xcfd8dc);
-
     div()
         .flex()
         .w_full()
+        .px_2()
+        .justify_start()
         .child(
-            div()
+            v_flex()
                 .max_w(px(600.0))
-                .px_4()
-                .py_3()
-                .bg(bg_assistant)
+                .px_2()
+                .py_1()
+                .bg(rgb(0xf0f4f8))
                 .border_1()
-                .border_color(border_assistant)
-                .rounded_lg()
-                .flex()
-                .flex_col()
-                .gap_2()
+                .border_color(rgb(0xcfd8dc))
+                .rounded_md()
+                .gap_0p5()
                 .child(
                     div()
                         .text_xs()
@@ -99,7 +93,7 @@ fn render_assistant_message(content: &str) -> Div {
                     div()
                         .text_sm()
                         .text_color(rgb(0x212121))
-                        .line_height(relative(1.5))
+                        .line_height(relative(1.4))
                         .child(content.to_string())
                 )
         )
@@ -110,22 +104,21 @@ fn render_assistant_message(content: &str) -> Div {
 // ============================================================================
 
 fn render_thought(content: &str) -> Div {
-    let bg_thought = rgb(0xfff8e1);
-
     div()
+        .flex()
         .w_full()
+        .px_2()
+        .justify_start()
         .child(
-            div()
+            v_flex()
                 .max_w(px(600.0))
-                .px_4()
-                .py_3()
-                .bg(bg_thought)
+                .px_2()
+                .py_1()
+                .bg(rgb(0xfff8e1))
                 .border_1()
                 .border_color(rgb(0xffd54f))
-                .rounded_lg()
-                .flex()
-                .flex_col()
-                .gap_2()
+                .rounded_md()
+                .gap_0p5()
                 .child(
                     div()
                         .text_xs()
@@ -137,7 +130,7 @@ fn render_thought(content: &str) -> Div {
                     div()
                         .text_sm()
                         .text_color(rgb(0x5d4037))
-                        .line_height(relative(1.5))
+                        .line_height(relative(1.4))
                         .child(content.to_string())
                 )
         )
@@ -168,19 +161,22 @@ fn render_tool_call(
     let (status_text, status_color) = get_status_text(status);
 
     div()
+        .flex()
         .w_full()
+        .px_4()
+        .justify_start()
         .child(
             div()
                 .max_w(px(600.0))
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_1p5()
                 .bg(bg_tool_call)
                 .border_1()
                 .border_color(rgb(0x81c784))
-                .rounded_lg()
+                .rounded_md()
                 .flex()
                 .flex_col()
-                .gap_2()
+                .gap_1()
                 .child(
                     // Header with title and status
                     div()
@@ -272,15 +268,15 @@ pub fn render_streaming_thought(content: &str) -> Div {
         .child(
             div()
                 .max_w(px(600.0))
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_2()
                 .bg(bg_thought)
                 .border_1()
                 .border_color(rgb(0xffd54f))
                 .rounded_lg()
                 .flex()
                 .flex_col()
-                .gap_2()
+                .gap_1()
                 .child(
                     div()
                         .text_xs()
@@ -345,15 +341,15 @@ pub fn render_streaming_tool_call(tool_call: &ToolCallEvent, output: &str) -> Di
         .child(
             div()
                 .max_w(px(600.0))
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_2()
                 .bg(bg_tool_call)
                 .border_1()
                 .border_color(rgb(0x81c784))
                 .rounded_lg()
                 .flex()
                 .flex_col()
-                .gap_2()
+                .gap_1()
                 .child(
                     div()
                         .flex()
@@ -409,16 +405,19 @@ fn render_mcp_server_connected(server_type: &McpServerType, host: &str, port: u1
     let border_mcp = rgb(0x90caf9);
 
     div()
+        .flex()
         .w_full()
+        .px_4()
+        .justify_start()
         .child(
             div()
                 .max_w(px(600.0))
-                .px_4()
-                .py_2()
+                .px_3()
+                .py_1p5()
                 .bg(bg_mcp)
                 .border_1()
                 .border_color(border_mcp)
-                .rounded_lg()
+                .rounded_md()
                 .flex()
                 .items_center()
                 .gap_2()
@@ -452,8 +451,8 @@ fn render_mcp_server_disconnected(server_type: &McpServerType, reason: Option<&s
         .child(
             div()
                 .max_w(px(600.0))
-                .px_4()
-                .py_2()
+                .px_3()
+                .py_1()
                 .bg(bg_mcp)
                 .border_1()
                 .border_color(border_mcp)
@@ -507,15 +506,15 @@ pub fn render_agent_fix_prompt(prompt: &str) -> Div {
         .child(
             div()
                 .max_w(px(600.0))
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_2()
                 .bg(bg_prompt)
                 .border_1()
                 .border_color(border_prompt)
                 .rounded_lg()
                 .flex()
                 .flex_col()
-                .gap_2()
+                .gap_1()
                 .child(
                     div()
                         .flex()
