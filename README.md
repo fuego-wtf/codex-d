@@ -10,13 +10,7 @@
 
 ## What is Codex-D?
 
-Codex-D analyzes git repositories to reveal hidden patterns in developer behavior and code quality. It examines commit patterns, message language, and temporal coding habits to detect burnout signals, stress indicators, and how mental state correlates with security vulnerabilities.
-
-Using **22 orchestrated MCP tools**, it runs behavioral analysis, Aikido security scans, and pulls architecture context from DeepWiki—now fully observable through **ACI.dev** for transparent agent execution. All insights are stored in private Kontext vaults.
-
-Built with **Rust + GPUI** for native desktop performance, it leverages Agent Client Protocol's adapter (ACI.dev) to route through Codex CLI with personal OpenAI accounts (zero API costs).
-
-**The result**: A 360° analysis connecting developer wellbeing with code quality, making the relationship between mental health and software security visible, measurable, and actionable.
+Codex-D analyzes git repositories to reveal hidden patterns in developer behavior and code quality. It examines commit patterns, message language, and temporal coding habits to detect burnout signals, stress indicators, and how mental state correlates with security vulnerabilities. Using 22 orchestrated MCP tools, it runs behavioral analysis, Aikido security scans, and pulls architecture context from DeepWiki—now fully observable through ACI.dev for transparent agent execution. All insights are stored in private Kontext vaults. Built with Rust + GPUI for native desktop performance, it leverages Agent Client Protocol's adapter (ACI.dev) to route through Codex CLI with personal OpenAI accounts (zero API costs). The result: a 360° analysis connecting developer wellbeing with code quality, making the relationship between mental health and software security visible, measurable, and actionable. Your code already tells your story—we just help you listen.
 
 ## Key Features
 
@@ -244,11 +238,18 @@ codex-d/
 
 ## Partner Technologies Used
 
-- ✅ **OpenAI** - Via personal account through Agent Client Protocol
-- ✅ **ACI.dev** - Agent Client Protocol adapter + DeepWiki observability
+This project integrates **4 partner technologies** for the Open Innovation track:
+
+### Core Integration
+- ✅ **OpenAI** - Via personal account through Agent Client Protocol (zero API costs)
 - ✅ **Lovable** - Demo site at [https://codexd.lovable.app/](https://codexd.lovable.app/)
-- ✅ **Kontext.dev** - Private vault storage for analysis results
-- ✅ **Aikido Security** - Docker-based vulnerability scanning
+
+### Side Challenges
+- ✅ **ACI.dev** - Agent Client Protocol adapter + DeepWiki observability for full transparency
+- ✅ **Kontext.dev** - Private encrypted vault storage for persistent analysis results
+
+### Additional Technology
+- **Aikido Security** - Docker-based vulnerability scanning (SAST, secrets, dependencies)
 
 ## Contributing
 
