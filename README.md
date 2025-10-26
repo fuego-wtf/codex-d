@@ -1,27 +1,43 @@
 # codex'd
 
-**Developer Psychology Analysis via Git Patterns**
+**Evidence-Based Psychological Archaeology Through Git Forensics**
 
-> "It's like therapy for your codebase - but it actually tells you what you're avoiding."
+> "A developer therapist that traces your error loops through commit history."
 
 ## What is codex'd?
 
-codex'd analyzes your git commit history to detect behavioral patterns and generates psychological observations about your development habits. It's not static analysis—it's pattern recognition that reveals:
+codex'd conducts **psychological archaeology** on your git repository—analyzing commit patterns to detect poorly designed workflows, error loops, and behavioral blindspots. It's not code review, it's **pattern-to-insight forensics** that builds evidence-based narratives about your development psychology:
 
-- Commitment issues (frequent small commits vs. rare large ones)
-- Minimizing language in commit messages vs. actual change size
-- Avoidance behaviors (what you're NOT working on)
-- Self-deception (commit messages vs. actual changes)
+- **Error loops**: Refactoring the same code every two weeks but never fixing root causes
+- **Avoidance behaviors**: 62% of your codebase untouched while you batch-commit on weekends
+- **Workflow anti-patterns**: Massive commits (>200 lines) that treat git as backup, not practice
+- **Identity gaps**: What your README claims vs. what your commit history reveals
 
-## How It Works
+## How It Works (4-Phase Enrichment Architecture)
 
 ```
-Git Repo → Pattern Detection → AI Analysis (Codex) → Psychological Observation
+Phase 1: Enrichment → Phase 2: Synthesis → Phase 3: Streaming → Phase 4: Storage
 ```
 
-1. **Git Analysis**: Scans your last 50 commits for behavioral patterns
-2. **Codex Inference**: Uses AI to interpret patterns psychologically
-3. **Observation**: Displays constructive reflection with a question
+**Phase 1: Parallel Context Gathering**
+- **Git Analyzer**: Scans commits for behavioral patterns (refactoring frequency, commit sizes, file avoidance)
+- **Kontext.dev API**: Extracts developer persona (commit style, README claims, stated priorities) *(coming soon)*
+- **Aikido Scanner**: Detects security blindspots (auth vulnerabilities, injection risks) *(coming soon)*
+
+**Phase 2: Evidence-Based Synthesis**
+- Codex receives enriched context from all three sources
+- Builds narrative: Evidence → Behavior → Error Loop → Blindspot → Question
+- Generates ONE devastating observation grounded in specific metrics
+
+**Phase 3: Real-Time Streaming**
+- FastMCP server streams observation via SSE
+- UI displays evidence-based narrative as it's generated
+- No code review, no suggestions—just psychological archaeology
+
+**Phase 4: Longitudinal Tracking**
+- Saves observation to SQLite with timestamp
+- Future sessions can reference: "Three months ago you had refactoring loops, now you have security blindspots"
+- Tracks whether patterns persist or evolve
 
 ## Quick Start
 
@@ -175,16 +191,23 @@ self.input_state.update(cx, |state, cx| {
 });
 ```
 
-## Example Observation
+## Example Observation (Evidence-Based Narrative)
 
 ```
-You consistently use minimizing language in your commit messages
-('quick fix', 'small change') while making substantial modifications—14
-commits averaged 176 lines each. This pattern suggests you're downplaying
-your work, possibly to manage your own expectations or reduce perceived
-risk. What would it feel like to acknowledge the true scope of your work
-in your commit messages?
+Your commit history shows 80% of your work happens on weekends with massive
+batch commits averaging 461 lines. Yet 62% of your codebase—including critical
+files like cli.ts, merger.ts, and sync.ts—hasn't been touched in your last
+10 commits. You're batch-saving work on weekends while avoiding the complex
+areas that actually need attention during the week. What are you protecting
+yourself from by only working when no one else is watching?
 ```
+
+**Narrative Structure:**
+1. **Evidence**: "80% weekend commits, 461 lines average" (specific metrics)
+2. **Behavior**: "Yet 62% untouched—cli.ts, merger.ts, sync.ts" (file-level avoidance)
+3. **Error Loop**: "Batch-saving on weekends while avoiding complex areas" (pattern identified)
+4. **Blindspot**: "Only working when no one else is watching" (psychological insight)
+5. **Question**: Forces reflection on the protective behavior
 
 ## Project Status
 
@@ -203,6 +226,10 @@ in your commit messages?
   - [ ] Git analyzer → enrichment flow
   - [ ] Codex streaming responses
 - [ ] End-to-end test
+
+## Related MCP Resources
+
+- [MCP Kontext Server](https://docs.kontext.dev/mcp/kontext.md): Hosted Kontext MCP server https://docs.kontext.dev/llms.txt
 
 ## License
 

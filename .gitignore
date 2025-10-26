@@ -22,3 +22,14 @@ Cargo.lock
 
 # Build artifacts
 *.app/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+ENV/
+
+# Rust incremental compilation cache
+**/incremental/

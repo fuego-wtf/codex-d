@@ -1,10 +1,10 @@
-// SQLite storage for conversation history
+// SQLite storage for conversation history and observation tracking
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
 use std::path::PathBuf;
 
-use crate::types::Message;
+use crate::types::{Message, GitAnalysis};
 
 pub struct Storage {
     conn: Connection,
@@ -33,6 +33,7 @@ impl Storage {
     }
 
     fn initialize_schema(&self) -> Result<()> {
+        // Messages table
         self.conn.execute(
             r#"
             CREATE TABLE IF NOT EXISTS messages (
@@ -44,6 +45,31 @@ impl Storage {
             "#,
             [],
         ).context("Failed to create messages table")?;
+
+        // Observations table (for longitudinal tracking)
+        self.conn.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS observations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                repo_path TEXT NOT NULL,
+                observation TEXT NOT NULL,
+                patterns_summary TEXT NOT NULL,
+                total_commits INTEGER NOT NULL,
+                severity REAL NOT NULL,
+                timestamp INTEGER NOT NULL
+            )
+            "#,
+            [],
+        ).context("Failed to create observations table")?;
+
+        // Index for efficient repo lookups
+        self.conn.execute(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_observations_repo
+            ON observations(repo_path, timestamp DESC)
+            "#,
+            [],
+        ).context("Failed to create observations index")?;
 
         Ok(())
     }
@@ -109,6 +135,73 @@ impl Storage {
 
         Ok(count as usize)
     }
+
+    /// Save an observation for longitudinal tracking
+    pub fn save_observation(
+        &self,
+        repo_path: &str,
+        observation: &str,
+        analysis: &GitAnalysis,
+    ) -> Result<()> {
+        let patterns_summary = analysis.patterns.iter()
+            .map(|p| format!("• {}: {}", p.title, p.description))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        self.conn.execute(
+            r#"
+            INSERT INTO observations
+            (repo_path, observation, patterns_summary, total_commits, severity, timestamp)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "#,
+            params![
+                repo_path,
+                observation,
+                patterns_summary,
+                analysis.total_commits_analyzed,
+                analysis.severity,
+                chrono::Utc::now().timestamp(),
+            ],
+        ).context("Failed to save observation")?;
+
+        Ok(())
+    }
+
+    /// Load past observations for a repository (most recent first)
+    pub fn load_observations(&self, repo_path: &str, limit: usize) -> Result<Vec<Observation>> {
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT observation, patterns_summary, total_commits, severity, timestamp
+            FROM observations
+            WHERE repo_path = ?1
+            ORDER BY timestamp DESC
+            LIMIT ?2
+            "#
+        ).context("Failed to prepare observations query")?;
+
+        let observations = stmt.query_map(params![repo_path, limit], |row| {
+            Ok(Observation {
+                observation: row.get(0)?,
+                patterns_summary: row.get(1)?,
+                total_commits: row.get(2)?,
+                severity: row.get(3)?,
+                timestamp: row.get(4)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()
+            .context("Failed to parse observations")?;
+
+        Ok(observations)
+    }
+}
+
+/// Historical observation for longitudinal tracking
+#[derive(Debug, Clone)]
+pub struct Observation {
+    pub observation: String,
+    pub patterns_summary: String,
+    pub total_commits: i64,
+    pub severity: f64,
+    pub timestamp: i64,
 }
 
 #[cfg(test)]

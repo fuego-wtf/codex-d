@@ -5,10 +5,12 @@ mod types;
 mod git_analyzer;
 mod codex_adapter;
 mod storage;
+mod ui;
 
 use gpui::*;
 use gpui::prelude::*;
 use std::sync::Arc;
+use std::collections::HashMap;
 use tokio::runtime::Handle;
 
 use gpui_component::{
@@ -17,10 +19,12 @@ use gpui_component::{
     Root,
 };
 
-use types::{AppState, Message};
+use types::{AppState, Message, TimelineEvent};
 use storage::Storage;
 use git_analyzer::GitAnalyzer;
 use codex_adapter::CodexAdapter;
+use ui::timeline::render_timeline;
+use ui::components::{render_streaming_thought, render_streaming_message, render_streaming_tool_call};
 
 fn main() {
     env_logger::init();
@@ -61,6 +65,7 @@ struct CodexView {
     selected_repo: Option<String>,
     repo_path_input: Entity<InputState>,
     messages: Vec<Message>,
+    timeline_events: Vec<TimelineEvent>,
     lifecycle_events: Vec<types::LifecycleEvent>,
     message_input_state: Entity<InputState>,
     storage: Option<Arc<Storage>>,
@@ -68,6 +73,15 @@ struct CodexView {
     codex_adapter: Option<Arc<CodexAdapter>>,
     is_loading: bool,
     error_message: Option<String>,
+    // Streaming state (temporary until event completes)
+    current_thought_buffer: String,
+    current_message_buffer: String,
+    active_tool_calls: HashMap<String, (types::ToolCallEvent, String)>, // (event, output)
+    // Enrichment timer
+    enrichment_start_time: Option<std::time::Instant>,
+    enrichment_elapsed: f32, // seconds
+    // Timeline scrolling
+    timeline_scroll_handle: ScrollHandle,
 }
 
 impl CodexView {
@@ -95,6 +109,7 @@ impl CodexView {
             selected_repo: None,
             repo_path_input,
             messages: Vec::new(),
+            timeline_events: Vec::new(),
             lifecycle_events: Vec::new(),
             message_input_state,
             storage,
@@ -102,6 +117,12 @@ impl CodexView {
             codex_adapter: None,
             is_loading: false,
             error_message: None,
+            current_thought_buffer: String::new(),
+            current_message_buffer: String::new(),
+            active_tool_calls: HashMap::new(),
+            enrichment_start_time: None,
+            enrichment_elapsed: 0.0,
+            timeline_scroll_handle: ScrollHandle::new(),
         }
     }
 
@@ -140,6 +161,7 @@ impl CodexView {
         self.app_state = AppState::Enriching;
         self.is_loading = true;
         self.lifecycle_events.clear();
+        self.messages.clear(); // Clear old messages from previous runs
         self.lifecycle_events.push(types::LifecycleEvent::running("Scanning git history".to_string()));
         cx.notify();
 
@@ -150,21 +172,73 @@ impl CodexView {
         // Note: This blocks the UI thread - not ideal but gets us working
         // We'll optimize with proper async later
         let tokio_handle = self.tokio_handle.clone();
-        let analysis_result = tokio_handle.block_on(GitAnalyzer::analyze(&repo_path));
+
+        // For now, use a no-op progress callback (we'll add UI integration later)
+        let analysis_result = tokio_handle.block_on(GitAnalyzer::analyze(&repo_path, |_step, _progress| {
+            // Progress callback - will integrate with UI later
+        }));
 
         match analysis_result {
             Ok(analysis) => {
-                eprintln!("Git analysis complete: {} commits analyzed", analysis.evidence.len());
+                eprintln!("Git analysis complete: {} commits analyzed, {} patterns found",
+                    analysis.total_commits_analyzed, analysis.patterns.len());
 
                 // Build system prompt from analysis
+                let patterns_summary = if analysis.patterns.is_empty() {
+                    "No significant behavioral patterns detected in git history.".to_string()
+                } else {
+                    analysis.patterns.iter()
+                        .map(|p| format!("• {}: {}", p.title, p.description))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+
                 let system_prompt = format!(
-                    "You are a developer psychology analyst. Based on git history analysis:\n\n\
-                     Pattern Detected: {}\n\
-                     Evidence: {} commits\n\
-                     Severity: {}\n\
-                     Summary: {}\n\n\
-                     Provide empathetic, constructive psychological insights about the developer's patterns.",
-                    analysis.pattern_type, analysis.evidence.len(), analysis.severity, analysis.summary
+                    "You are a developer psychologist practicing evidence-based conversational archaeology.\n\n\
+                     ## GIT COMMIT PATTERNS (from {} commits analyzed, severity {:.1}/1.0)\n\n\
+                     {}\n\n\
+                     ## YOUR MISSION: GUIDE USERS TO ENRICH THEIR PROJECT\n\n\
+                     You have MCP tools to analyze git patterns. Use them to:\n\
+                     1. Surface blindspots users can't see themselves\n\
+                     2. Ask questions that make them reflect deeply\n\
+                     3. Guide them toward actionable improvements\n\
+                     4. Build longitudinal understanding across sessions\n\n\
+                     ## CONVERSATION STRATEGY (Socratic Guidance)\n\n\
+                     **Phase 1: Discovery** (Current - gather context)\n\
+                     - Ask about: project goals, team structure, customer, timeline\n\
+                     - Use their answers to understand MOTIVATION and CONSTRAINTS\n\
+                     - Build rapport through genuine curiosity\n\
+                     - Listen for what they DON'T say\n\n\
+                     **Phase 2: Investigation** (use MCP tools)\n\
+                     When you have context, use tools to dig deeper:\n\
+                     - `analyze_commit_patterns` - find commitment issues\n\
+                     - `analyze_message_language` - detect minimizing/defensive patterns\n\
+                     - `compare_message_vs_diff` - spot self-deception\n\
+                     - `get_temporal_patterns` - reveal stress/overwork\n\
+                     - `get_repo_context` - access memory from past sessions\n\n\
+                     **Phase 3: Observation** (synthesize evidence)\n\
+                     Create a 3-4 sentence observation:\n\
+                     1. Cite EXACT git numbers (\"47 commits at night = 62%\")\n\
+                     2. Connect to their stated goals (\"but you said X...\")\n\
+                     3. Name the pattern (\"This suggests Y anti-pattern\")\n\
+                     4. Ask ONE pointed question about the blindspot\n\n\
+                     **Phase 4: Guidance** (lead toward action)\n\
+                     Based on their response:\n\
+                     - Validate their awareness\n\
+                     - Suggest concrete experiments\n\
+                     - Use `flag_repo_issue` to track the pattern\n\
+                     - Offer to check back next session\n\n\
+                     ## ABSOLUTE RULES\n\n\
+                     - DO NOT read, analyze, or reference source code files\n\
+                     - DO NOT do code review or technical assessment\n\
+                     - Focus on BEHAVIOR patterns, not code quality\n\
+                     - Use EXACT numbers from git data (never approximate)\n\
+                     - Be conversational and empathetic - therapist, not linter\n\
+                     - Each question should make them think deeper about their project\n\n\
+                     **Your goal: Guide them to insights they'd never find alone. Make them WANT to share more about their project.**",
+                    analysis.total_commits_analyzed,
+                    analysis.severity,
+                    patterns_summary
                 );
 
                 // Initialize Codex
@@ -193,25 +267,59 @@ impl CodexView {
                         }
 
                         // Create session
-                        match adapter.create_session(system_prompt) {
+                        match adapter.create_session(system_prompt, repo_path.clone()) {
                             Ok(session_id) => {
                                 eprintln!("Codex session created: {}", session_id);
 
                                 // Success!
-                                self.codex_adapter = Some(adapter);
+                                self.codex_adapter = Some(adapter.clone());
                                 self.lifecycle_events.push(types::LifecycleEvent::completed("Git analysis".to_string()));
                                 self.lifecycle_events.push(types::LifecycleEvent::completed("AI initialized".to_string()));
                                 self.app_state = AppState::ChatActive;
                                 self.is_loading = false;
-
-                                // Add initial system message with analysis
-                                let initial_msg = Message::assistant(format!(
-                                    "I've analyzed {} commits from your repository.\n\n{}\n\nWhat would you like to explore about your development patterns?",
-                                    analysis.evidence.len(), analysis.summary
-                                ));
-                                self.messages.push(initial_msg);
-
                                 cx.notify();
+
+                                // Create beautiful discovery greeting (Perplexity-style)
+                                eprintln!("✨ Creating discovery experience...");
+                                eprintln!("📊 Git patterns ready for synthesis");
+                                eprintln!("🔧 MCP tools: codex-psychology available at :52848");
+
+                                // Generate contextual discovery greeting based on git patterns
+                                let pattern_count = analysis.patterns.len();
+                                let commit_count = analysis.total_commits_analyzed;
+
+                                let discovery_greeting = if pattern_count > 0 {
+                                    let top_pattern = &analysis.patterns[0];
+                                    format!(
+                                        "## 🔍 Analysis Complete\n\n\
+                                         I've analyzed **{} commits** and discovered **{} behavioral patterns**.\n\n\
+                                         Most notable: *{}*\n\n\
+                                         Before I share my observations, I'd like to understand the context.\n\n\
+                                         **Tell me about this project:**\n\
+                                         - What are you building?\n\
+                                         - Who's working on it?\n\
+                                         - What's the goal?",
+                                        commit_count,
+                                        pattern_count,
+                                        top_pattern.title
+                                    )
+                                } else {
+                                    format!(
+                                        "## 👋 Let's Explore Your Code\n\n\
+                                         I've analyzed **{} commits** from your repository.\n\n\
+                                         To give you meaningful insights, I need to understand:\n\n\
+                                         **What is this project?** Tell me about what you're building and who it's for.",
+                                        commit_count
+                                    )
+                                };
+
+                                // Add beautiful discovery greeting to timeline
+                                self.timeline_events.push(TimelineEvent::AssistantMessage {
+                                    content: discovery_greeting,
+                                    timestamp: chrono::Utc::now().timestamp(),
+                                });
+
+                                eprintln!("✅ Discovery phase ready - Claude will use MCP tools when user responds");
                             }
                             Err(e) => {
                                 eprintln!("Failed to create session: {}", e);
@@ -253,6 +361,15 @@ impl CodexView {
             state.set_value("", window, cx);
         });
 
+        // Add user message to timeline
+        let now = chrono::Utc::now().timestamp();
+        let user_event = TimelineEvent::UserMessage {
+            content: content.clone(),
+            timestamp: now,
+        };
+        self.timeline_events.push(user_event);
+
+        // Also save to old messages vec for storage
         let message = Message::user(content.clone());
         self.messages.push(message.clone());
 
@@ -262,53 +379,131 @@ impl CodexView {
 
         cx.notify();
 
-        // Send to Codex and stream response
+        // Send to Codex and stream response asynchronously
         if let Some(adapter) = &self.codex_adapter {
             let adapter = adapter.clone();
+            let storage = self.storage.clone();
+            let tokio_handle = self.tokio_handle.clone();
 
-            // Collect response chunks
-            // Note: This blocks the UI thread - not ideal but gets us working
-            // We'll optimize with proper async later
-            let mut response_text = String::new();
+            // Create channel for streaming
+            let (tx, rx) = smol::channel::bounded::<types::StreamEvent>(100);
 
-            let result = adapter.send_message(content, |event| {
-                match event {
-                    types::StreamEvent::MessageChunk(chunk) => {
-                        response_text.push_str(&chunk);
-                        eprintln!("Received chunk: {}", chunk);
+            // Send via ACP asynchronously
+            let adapter_clone = adapter.clone();
+            let tx_clone = tx.clone();
+
+            std::thread::spawn(move || {
+                tokio_handle.block_on(async move {
+                    let result = adapter_clone.send_message(content, move |event| {
+                        let _ = tx.send_blocking(event);
+                    });
+
+                    if let Err(e) = result {
+                        eprintln!("Failed to send message: {}", e);
+                        let _ = tx_clone.send_blocking(types::StreamEvent::MessageChunk(
+                            format!("\n\nError: {}", e)
+                        ));
                     }
-                    types::StreamEvent::LifecycleEvent(event) => {
-                        eprintln!("Lifecycle event: {:?}", event);
-                    }
-                    types::StreamEvent::PermissionRequest(request) => {
-                        eprintln!("Permission request: {:?}", request);
-                    }
-                }
+                });
             });
 
-            match result {
-                Ok(_) => {
-                    // Add assistant's response
-                    let assistant_message = Message::assistant(response_text);
-                    self.messages.push(assistant_message.clone());
+            // Process streaming events and build timeline
+            cx.spawn(async move |view: WeakEntity<Self>, cx| {
+                while let Ok(event) = rx.recv().await {
+                    match event {
+                        types::StreamEvent::MessageChunk(chunk) => {
+                            view.update(cx, |view, cx| {
+                                view.current_message_buffer.push_str(&chunk);
+                                cx.notify();
+                            })?;
+                        }
+                        types::StreamEvent::ThoughtChunk(chunk) => {
+                            view.update(cx, |view, cx| {
+                                view.current_thought_buffer.push_str(&chunk);
+                                cx.notify();
+                            })?;
+                        }
+                        types::StreamEvent::ToolCall(tool_call) => {
+                            view.update(cx, |view, cx| {
+                                view.active_tool_calls.insert(
+                                    tool_call.tool_call_id.clone(),
+                                    (tool_call, String::new())
+                                );
+                                cx.notify();
+                            })?;
+                        }
+                        types::StreamEvent::ToolCallUpdate(update) => {
+                            view.update(cx, |view, cx| {
+                                if let Some((tool_call, output)) = view.active_tool_calls.get_mut(&update.tool_call_id) {
+                                    if let Some(status) = &update.status {
+                                        tool_call.status = status.clone();
+                                    }
+                                    if let Some(content) = &update.content {
+                                        output.push_str(content);
+                                    }
+                                }
+                                cx.notify();
+                            })?;
+                        }
+                        _ => {}
+                    }
+                }
 
-                    if let Some(storage) = &self.storage {
-                        let _ = storage.save_message(&assistant_message);
+                // Stream complete - convert buffers to timeline events
+                view.update(cx, |view, cx| {
+                    let now = chrono::Utc::now().timestamp();
+
+                    // Add thought to timeline if present
+                    if !view.current_thought_buffer.is_empty() {
+                        view.timeline_events.push(TimelineEvent::Thought {
+                            content: view.current_thought_buffer.clone(),
+                            timestamp: now,
+                        });
+                        view.current_thought_buffer.clear();
+                    }
+
+                    // Add tool calls to timeline
+                    for (_id, (tool_call, output)) in view.active_tool_calls.drain() {
+                        view.timeline_events.push(TimelineEvent::ToolCall {
+                            tool_call_id: tool_call.tool_call_id,
+                            title: tool_call.title,
+                            kind: tool_call.kind,
+                            status: tool_call.status,
+                            locations: tool_call.locations,
+                            output: if output.is_empty() { None } else { Some(output) },
+                            timestamp: now,
+                            mcp_server: tool_call.mcp_server,
+                            routed_via: None, // TODO: Add gateway routing logic
+                        });
+                    }
+
+                    // Add assistant message to timeline if present
+                    if !view.current_message_buffer.is_empty() {
+                        let msg_content = view.current_message_buffer.clone();
+                        view.timeline_events.push(TimelineEvent::AssistantMessage {
+                            content: msg_content.clone(),
+                            timestamp: now,
+                        });
+
+                        // Save to storage
+                        if let Some(storage) = &storage {
+                            let msg = Message::assistant(msg_content);
+                            let _ = storage.save_message(&msg);
+                        }
+
+                        view.current_message_buffer.clear();
                     }
 
                     cx.notify();
-                }
-                Err(e) => {
-                    eprintln!("Failed to send message: {}", e);
-                    let error_message = Message::assistant(format!("Error: {}", e));
-                    self.messages.push(error_message);
-                    cx.notify();
-                }
-            }
+                })
+            }).detach();
         } else {
             eprintln!("No Codex adapter available");
-            let error_message = Message::assistant("Error: Codex not initialized".to_string());
-            self.messages.push(error_message);
+            let error_event = TimelineEvent::AssistantMessage {
+                content: "Error: Codex not initialized".to_string(),
+                timestamp: chrono::Utc::now().timestamp(),
+            };
+            self.timeline_events.push(error_event);
             cx.notify();
         }
     }
@@ -515,31 +710,28 @@ impl CodexView {
                     )
             )
             .child(
-                // Messages area
+                // Timeline area (Perplexity-style trajectory view) - scrollable
                 div()
-                    .flex()
-                    .flex_col()
+                    .id("timeline-container")
                     .flex_1()
-                    .p_6()
-                    .gap_4()
-                    .children(self.messages.iter().map(|msg| {
-                        let is_user = msg.is_user();
-                        let bg = if is_user { bg_user } else { bg_assistant };
-
+                    .overflow_y_scroll()
+                    .track_scroll(&self.timeline_scroll_handle)
+                    .child(
+                        // Inner content div (not flex container!)
                         div()
-                            .flex()
-                            .w_full()
-                            .when(is_user, |div| div.justify_end())
-                            .child(
-                                div()
-                                    .max_w(px(600.0))
-                                    .px_4()
-                                    .py_3()
-                                    .bg(bg)
-                                    .rounded_lg()
-                                    .child(msg.content().to_string())
-                            )
-                    }))
+                            .p_6()
+                            .child(render_timeline(&self.timeline_events))
+                            // Add streaming views for active buffers
+                            .when(!self.current_thought_buffer.is_empty(), |parent| {
+                                parent.child(render_streaming_thought(&self.current_thought_buffer))
+                            })
+                            .when(!self.current_message_buffer.is_empty(), |parent| {
+                                parent.child(render_streaming_message(&self.current_message_buffer))
+                            })
+                            .children(self.active_tool_calls.iter().map(|(_, (tool_call, output))| {
+                                render_streaming_tool_call(tool_call, output)
+                            }))
+                    )
             )
             .child(
                 // Input area

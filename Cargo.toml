@@ -13,6 +13,7 @@ git2 = "0.19"
 
 # Async
 tokio = { version = "1.41", features = ["full"] }
+smol = "2.0"
 
 # Storage
 rusqlite = { version = "0.32", features = ["bundled"] }
