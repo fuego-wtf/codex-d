@@ -1,14 +1,30 @@
 """FastMCP server for developer psychology analysis via git patterns."""
 
 from fastmcp import FastMCP
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 import json
 from pathlib import Path
 from datetime import datetime, timedelta
 from git import Repo
+import httpx
+import ssl
+import certifi
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+# Look for .env in the parent directory of mcp_server/
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 # Import database functions
 from . import database as db
+
+# Kontext API Configuration
+KONTEXT_API_KEY = "ktextqxQrFCqCXxjnxsKuUaBvzBIEhEMDMkEHTwkurZUFBXfMuZzaCFMmYgzWrKmaFqxv"
+KONTEXT_BASE_URL = "https://staging-api.kontext.dev"
+KONTEXT_ORG_ID = "cmh6h4j6c0004pm0k3q9kceit"
+KONTEXT_DEVELOPER_ID = "cmh6bce1u000dpe0kae1phdsg"
 
 # Initialize FastMCP server
 mcp = FastMCP("codex-psychology")
@@ -1021,6 +1037,369 @@ def flag_behavioral_pattern(session_id: int, pattern_name: str, evidence: str, s
         return json.dumps({
             "status": "error",
             "message": f"Failed to flag behavioral pattern: {str(e)}"
+        })
+
+
+@mcp.tool()
+async def run_aikido_security_scan(
+    repo_path: Optional[str] = None,
+    scan_types: Optional[Union[str, List[str]]] = None
+) -> str:
+    """
+    Run Aikido Security scan on the repository to detect vulnerabilities.
+
+    Integrates with Aikido Security platform to scan for:
+    - SAST (Static Application Security Testing) vulnerabilities
+    - Exposed secrets and credentials
+    - Vulnerable dependencies
+    - Security misconfigurations
+
+    Args:
+        repo_path: Path to repository (defaults to current repo)
+        scan_types: List of scan types or comma-separated string (sast, secrets, dependencies)
+
+    Returns:
+        JSON string with scan results
+    """
+    global _current_repo_path
+
+    try:
+        # Use provided repo or fall back to current
+        target_repo = repo_path or _current_repo_path
+        if not target_repo:
+            return json.dumps({
+                "status": "error",
+                "message": "No repository set. Call set_repository() first or provide repo_path."
+            })
+
+        # Normalize scan_types to list
+        if isinstance(scan_types, str):
+            scan_types_list = [s.strip() for s in scan_types.split(',')]
+        elif scan_types:
+            scan_types_list = scan_types
+        else:
+            scan_types_list = ['sast', 'secrets', 'dependencies']  # Default
+
+        # Import Aikido integration
+        from .aikido_integration import run_aikido_scan
+
+        # Run the scan with scan types
+        scan_results = await run_aikido_scan(target_repo, scan_types=scan_types_list)
+
+        # Defensive: check if scan_results indicates error
+        if isinstance(scan_results, dict) and scan_results.get("status") == "error":
+            return json.dumps({
+                "status": "error",
+                "error_type": scan_results.get("error_type", "unknown"),
+                "message": scan_results.get("message", "Aikido scan failed"),
+                "fix": scan_results.get("fix", "Check logs for details")
+            })
+
+        # Safe access with default values
+        findings_count = scan_results.get("findings_count", 0)
+        status_msg = scan_results.get("status", "success")
+
+        return json.dumps({
+            "status": status_msg,
+            "repo_path": target_repo,
+            "scan_types": scan_types_list,
+            "scan_results": scan_results,
+            "message": f"Aikido security scan completed. Found {findings_count} issues." if findings_count > 0 else "Aikido scan complete. No issues found."
+        })
+
+    except KeyError as e:
+        return json.dumps({
+            "status": "error",
+            "error_type": "invalid_response",
+            "message": f"Aikido scan returned unexpected format: missing field '{e}'",
+            "fix": "Check Aikido scanner output format"
+        })
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "error_type": "unknown",
+            "message": f"Aikido scan failed: {str(e)}",
+            "fix": "Check logs and ensure Docker is running with valid API key"
+        })
+
+
+# ====================
+# Kontext Integration Tools
+# ====================
+
+@mcp.tool()
+async def upload_project_to_kontext(
+    documentation_path: str = "/Users/resatugurulu/Downloads/kontextd.md"
+) -> str:
+    """
+    Upload the codex-d project documentation to Kontext vault for persistent context storage.
+
+    Args:
+        documentation_path: Path to the kontextd.md file
+
+    Returns:
+        JSON string with upload status and file ID
+    """
+    try:
+        # Use system cert path for SSL verification (works on macOS)
+        cert_path = '/etc/ssl/cert.pem'
+
+        async with httpx.AsyncClient(verify=cert_path) as client:
+            # Upload file using correct Kontext API format
+            with open(documentation_path, 'rb') as f:
+                files = {'file': ('kontextd.md', f, 'text/markdown')}
+
+                upload_response = await client.post(
+                    f"{KONTEXT_BASE_URL}/vault/files",
+                    headers={
+                        'x-api-key': KONTEXT_API_KEY,
+                        'x-as-user': KONTEXT_DEVELOPER_ID
+                    },
+                    files=files,
+                    data={
+                        'metadata': json.dumps({
+                            'project': 'codex-d',
+                            'type': 'technical-documentation',
+                            'version': '1.0.0',
+                            'org_id': KONTEXT_ORG_ID,
+                            'developer_id': KONTEXT_DEVELOPER_ID,
+                            'components': [
+                                'gpui-framework',
+                                'mcp-psychology-server',
+                                'codex-acp-integration',
+                                'sqlite-database',
+                                'git-analysis'
+                            ]
+                        })
+                    }
+                )
+
+            result = upload_response.json()
+            file_id = result.get('id') or result.get('fileId')
+
+        return json.dumps({
+            "status": "success",
+            "file_id": file_id,
+            "message": f"Documentation uploaded successfully to Kontext. File ID: {file_id}",
+            "result": result
+        })
+
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to upload to Kontext: {str(e)}"
+        })
+
+
+@mcp.tool()
+async def query_codex_context(
+    query: str,
+    top_k: int = 5
+) -> str:
+    """
+    Query the Kontext vault for codex-d project context and documentation.
+
+    Args:
+        query: Question about the codex-d project
+        top_k: Number of context chunks to retrieve
+
+    Returns:
+        JSON string with search results
+    """
+    try:
+        # Use system cert path for SSL verification (works on macOS)
+        cert_path = '/etc/ssl/cert.pem'
+
+        async with httpx.AsyncClient(verify=cert_path) as client:
+            # Query vault using correct Kontext API format
+            query_response = await client.get(
+                f"{KONTEXT_BASE_URL}/vault/files",
+                headers={
+                    'x-api-key': KONTEXT_API_KEY,
+                    'x-as-user': KONTEXT_DEVELOPER_ID
+                },
+                params={
+                    'search': query,
+                    'limit': top_k
+                }
+            )
+
+            result = query_response.json()
+
+        return json.dumps({
+            "status": "success",
+            "query": query,
+            "results": result,
+            "metadata": {
+                "source": "kontext-vault",
+                "results_count": len(result) if isinstance(result, list) else 0
+            }
+        })
+
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to query Kontext: {str(e)}"
+        })
+
+
+@mcp.tool()
+async def get_codex_system_prompt() -> str:
+    """
+    Get a comprehensive system prompt with all codex-d project context.
+
+    Returns:
+        JSON string with structured system prompt including project details
+    """
+    try:
+        # Construct enhanced system prompt with Kontext integration
+        system_prompt = """
+You are Codex, a code psychology analyst with deep knowledge of the codex-d project.
+
+## Project Context:
+Full project documentation is stored in Kontext vault and can be queried using query_codex_context().
+
+## Core Architecture:
+- GPUI Framework (Rust) for UI
+- MCP Psychology Server (Python) for analysis
+- SQLite database for pattern storage
+- 22 specialized MCP tools for behavioral analysis (18 + 4 Kontext tools)
+
+## Your Capabilities:
+1. Analyze developer psychology through commit patterns
+2. Detect recurring behavioral issues
+3. Provide actionable fix recommendations
+4. Track remediation attempts
+5. Integrate security scanning via Aikido
+6. Store and retrieve project context from Kontext vault
+
+## Mandatory Tool Sequence:
+Always execute these tools first:
+1. start_session(repo_path)
+2. set_repository(repo_path)
+3. analyze_commit_patterns(limit=50)
+4. analyze_message_language()
+5. compare_message_vs_diff()
+6. get_temporal_patterns()
+7. run_aikido_security_scan(repo_path)
+8. DEEPWIKI_BOH8VT8Z__ASK_QUESTION(question)
+
+## Kontext Integration:
+- upload_project_to_kontext() - Upload documentation
+- query_codex_context(query) - Search stored documentation
+- save_analysis_to_kontext(session_id, summary, repo_path) - Persist analysis results
+"""
+
+        return json.dumps({
+            "status": "success",
+            "system_prompt": system_prompt,
+            "kontext_available": True,
+            "org_id": KONTEXT_ORG_ID,
+            "developer_id": KONTEXT_DEVELOPER_ID
+        })
+
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to get system prompt: {str(e)}"
+        })
+
+
+@mcp.tool()
+async def save_analysis_to_kontext(
+    session_id: int,
+    analysis_summary: str,
+    repo_path: str
+) -> str:
+    """
+    Save the analysis results to Kontext for future reference and learning.
+
+    Args:
+        session_id: Current analysis session ID
+        analysis_summary: Complete analysis findings (JSON string)
+        repo_path: Repository that was analyzed
+
+    Returns:
+        JSON string with confirmation message and file ID
+    """
+    try:
+        # Parse analysis summary
+        analysis_results = json.loads(analysis_summary) if isinstance(analysis_summary, str) else analysis_summary
+
+        # Prepare analysis document
+        analysis_doc = f"""# Analysis Session: {session_id}
+**Date**: {datetime.now().isoformat()}
+**Repository**: {repo_path}
+
+## Findings Summary
+{json.dumps(analysis_results.get('summary', {}), indent=2)}
+
+## Critical Issues
+{json.dumps(analysis_results.get('critical', []), indent=2)}
+
+## Behavioral Patterns
+{json.dumps(analysis_results.get('patterns', []), indent=2)}
+
+## Security Scan Results
+{json.dumps(analysis_results.get('security', {}), indent=2)}
+
+## Recommendations
+{json.dumps(analysis_results.get('recommendations', []), indent=2)}
+
+## Metadata
+- Tool calls executed: {analysis_results.get('tool_count', 0)}
+- Processing time: {analysis_results.get('duration', 'N/A')}
+- Severity distribution: {json.dumps(analysis_results.get('severity_counts', {}), indent=2)}
+"""
+
+        # Save to temp file
+        temp_path = f"/tmp/analysis_{session_id}.md"
+        with open(temp_path, 'w') as f:
+            f.write(analysis_doc)
+
+        # Use system cert path for SSL verification (works on macOS)
+        cert_path = '/etc/ssl/cert.pem'
+
+        # Upload to Kontext using correct API format
+        async with httpx.AsyncClient(verify=cert_path) as client:
+            with open(temp_path, 'rb') as f:
+                files = {'file': (f'analysis_{session_id}.md', f, 'text/markdown')}
+
+                upload_response = await client.post(
+                    f"{KONTEXT_BASE_URL}/vault/files",
+                    headers={
+                        'x-api-key': KONTEXT_API_KEY,
+                        'x-as-user': KONTEXT_DEVELOPER_ID
+                    },
+                    files=files,
+                    data={
+                        'metadata': json.dumps({
+                            'type': 'analysis-results',
+                            'session_id': session_id,
+                            'repo': repo_path,
+                            'org_id': KONTEXT_ORG_ID,
+                            'timestamp': datetime.now().isoformat()
+                        })
+                    }
+                )
+
+            result = upload_response.json()
+            file_id = result.get('id') or result.get('fileId')
+
+        # Clean up temp file
+        os.unlink(temp_path)
+
+        return json.dumps({
+            "status": "success",
+            "file_id": file_id,
+            "message": f"Analysis saved to Kontext. File ID: {file_id}",
+            "result": result
+        })
+
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to save analysis to Kontext: {str(e)}"
         })
 
 

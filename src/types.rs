@@ -302,6 +302,17 @@ pub enum TimelineEvent {
         context: Option<String>,
         timestamp: i64,
     },
+    SecurityFinding {
+        vulnerability_id: String,
+        severity: String,  // "critical", "high", "medium", "low"
+        title: String,
+        description: String,
+        file_path: String,
+        line_number: Option<u32>,
+        cwe_id: Option<String>,
+        recommendation: String,
+        timestamp: i64,
+    },
 }
 
 impl TimelineEvent {
@@ -314,6 +325,7 @@ impl TimelineEvent {
             Self::McpServerConnected { timestamp, .. } => *timestamp,
             Self::McpServerDisconnected { timestamp, .. } => *timestamp,
             Self::AgentFixPrompt { timestamp, .. } => *timestamp,
+            Self::SecurityFinding { timestamp, .. } => *timestamp,
         }
     }
 }

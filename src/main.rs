@@ -10,7 +10,7 @@ mod ui;
 use gpui::*;
 use gpui::prelude::*;
 use std::sync::Arc;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tokio::runtime::Handle;
 
 use gpui_component::{
@@ -23,7 +23,6 @@ use types::{AppState, Message, TimelineEvent};
 use storage::Storage;
 use git_analyzer::GitAnalyzer;
 use codex_adapter::CodexAdapter;
-use ui::timeline::render_timeline;
 use ui::components::{render_streaming_thought, render_streaming_message, render_streaming_tool_call};
 
 fn main() {
@@ -82,6 +81,8 @@ struct CodexView {
     enrichment_elapsed: f32, // seconds
     // Timeline scrolling
     timeline_scroll_handle: ScrollHandle,
+    // Tool call expansion state
+    expanded_tool_calls: HashSet<String>,
 }
 
 impl CodexView {
@@ -123,7 +124,17 @@ impl CodexView {
             enrichment_start_time: None,
             enrichment_elapsed: 0.0,
             timeline_scroll_handle: ScrollHandle::new(),
+            expanded_tool_calls: HashSet::new(),
         }
+    }
+
+    fn toggle_tool_expansion(&mut self, tool_call_id: String, cx: &mut Context<Self>) {
+        if self.expanded_tool_calls.contains(&tool_call_id) {
+            self.expanded_tool_calls.remove(&tool_call_id);
+        } else {
+            self.expanded_tool_calls.insert(tool_call_id);
+        }
+        cx.notify();
     }
 
     fn on_browse_clicked(&mut self, cx: &mut Context<Self>) {
@@ -197,12 +208,15 @@ impl CodexView {
                     "You are a developer psychologist practicing evidence-based conversational archaeology.\n\n\
                      ## MANDATORY FIRST STEPS - DO THIS BEFORE ANY RESPONSE\n\n\
                      **CRITICAL: You MUST call these tools IN THIS EXACT ORDER before replying to the user:**\n\n\
-                     1. `set_repository(repo_path)` - Set the repository to analyze (use: \"{}\")\n\
-                     2. `get_repo_context()` - Get scan history and recurring issues\n\
-                     3. `analyze_commit_patterns(limit=50)` - Analyze commit behavior\n\
-                     4. `analyze_message_language(limit=50)` - Detect defensive language\n\
-                     5. `DEEPWIKI_BOH8VT8Z__ASK_QUESTION(question)` - Ask about the codebase structure\n\n\
-                     **DO NOT skip these steps. DO NOT ask permission. DO NOT respond conversationally until ALL 5 tools have been called.**\n\n\
+                     1. `start_session(repo_path)` - Create scan session (use: \"{}\") - **SAVE THE SESSION_ID FROM RESPONSE**\n\
+                     2. `set_repository(repo_path)` - Set the repository to analyze (use: \"{}\")\n\
+                     3. `get_repo_context()` - Get scan history and recurring issues\n\
+                     4. `analyze_commit_patterns(limit=50)` - Analyze commit behavior\n\
+                     5. `analyze_message_language(limit=50)` - Detect defensive language\n\
+                     6. `run_aikido_security_scan(repo_path)` - Run security vulnerability scan\n\
+                     7. `DEEPWIKI_BOH8VT8Z__ASK_QUESTION(question)` - Ask about the codebase structure\n\
+                     8. `save_scan_results(session_id, git_analysis, security_analysis)` - Persist all findings\n\n\
+                     **DO NOT skip these steps. DO NOT ask permission. DO NOT respond conversationally until ALL 8 tools have been called.**\n\n\
                      ## GIT COMMIT PATTERNS (from {} commits analyzed, severity {:.1}/1.0)\n\n\
                      {}\n\n\
                      ## MCP TOOLS AVAILABLE\n\n\
@@ -252,7 +266,7 @@ impl CodexView {
                      - Use `flag_repo_issue` to track the pattern\n\
                      - Offer to check back next session\n\n\
                      ## ABSOLUTE RULES\n\n\
-                     - **NEVER respond conversationally until you've called all 5 MANDATORY tools first**\n\
+                     - **NEVER respond conversationally until you've called all 8 MANDATORY tools first**\n\
                      - DO NOT read, analyze, or reference source code files directly\n\
                      - DO NOT do code review or technical assessment\n\
                      - Focus on BEHAVIOR patterns, not code quality\n\
@@ -260,6 +274,7 @@ impl CodexView {
                      - Be conversational and empathetic - therapist, not linter\n\
                      - Each question should make them think deeper about their project\n\n\
                      **Your goal: Guide them to insights they'd never find alone. Make them WANT to share more about their project.**",
+                    repo_path,
                     repo_path,
                     analysis.total_commits_analyzed,
                     analysis.severity,
@@ -316,24 +331,37 @@ impl CodexView {
                                 let discovery_greeting = if pattern_count > 0 {
                                     let top_pattern = &analysis.patterns[0];
                                     format!(
-                                        "## 🔍 Analysis Complete\n\n\
-                                         I've analyzed **{} commits** and discovered **{} behavioral patterns**.\n\n\
+                                        "## 🔬 Starting Deep Analysis\n\n\
+                                         **Initial git scan found {} behavioral patterns** from {} commits.\n\n\
                                          Most notable: *{}*\n\n\
-                                         Before I share my observations, I'd like to understand the context.\n\n\
-                                         **Tell me about this project:**\n\
-                                         - What are you building?\n\
-                                         - Who's working on it?\n\
-                                         - What's the goal?",
-                                        commit_count,
+                                         **🤖 Running mandatory analysis tools:**\n\
+                                         ✓ Creating scan session (persisting to database)\n\
+                                         ✓ Loading repository context & scan history\n\
+                                         ✓ Analyzing commit patterns (detecting anxiety/avoidance)\n\
+                                         ✓ Analyzing message language (minimizing/defensive patterns)\n\
+                                         ✓ Running Aikido security scan (SAST, secrets, dependencies)\n\
+                                         ✓ Querying codebase structure via DeepWiki\n\
+                                         ✓ Saving results for longitudinal tracking\n\n\
+                                         **When you're ready, just type anything to begin the conversation.**\n\
+                                         I'll share my observations and ask about your project goals.",
                                         pattern_count,
+                                        commit_count,
                                         top_pattern.title
                                     )
                                 } else {
                                     format!(
-                                        "## 👋 Let's Explore Your Code\n\n\
-                                         I've analyzed **{} commits** from your repository.\n\n\
-                                         To give you meaningful insights, I need to understand:\n\n\
-                                         **What is this project?** Tell me about what you're building and who it's for.",
+                                        "## 🔬 Starting Deep Analysis\n\n\
+                                         **Initial git scan analyzed {} commits.**\n\n\
+                                         **🤖 Running mandatory analysis tools:**\n\
+                                         ✓ Creating scan session (persisting to database)\n\
+                                         ✓ Loading repository context & scan history\n\
+                                         ✓ Analyzing commit patterns (detecting anxiety/avoidance)\n\
+                                         ✓ Analyzing message language (minimizing/defensive patterns)\n\
+                                         ✓ Running Aikido security scan (SAST, secrets, dependencies)\n\
+                                         ✓ Querying codebase structure via DeepWiki\n\
+                                         ✓ Saving results for longitudinal tracking\n\n\
+                                         **When you're ready, just type anything to begin the conversation.**\n\
+                                         I'll share my observations and ask about your project.",
                                         commit_count
                                     )
                                 };
@@ -344,7 +372,10 @@ impl CodexView {
                                     timestamp: chrono::Utc::now().timestamp(),
                                 });
 
-                                eprintln!("✅ Discovery phase ready - Claude will use MCP tools when user responds");
+                                eprintln!("✅ Discovery phase ready - triggering auto-priming");
+
+                                // Auto-prime: Send initial message to trigger mandatory tool calls
+                                self.auto_prime_agent(cx);
                             }
                             Err(e) => {
                                 eprintln!("Failed to create session: {}", e);
@@ -371,6 +402,162 @@ impl CodexView {
                 self.is_loading = false;
                 cx.notify();
             }
+        }
+    }
+
+    fn auto_prime_agent(&mut self, cx: &mut Context<Self>) {
+        // Automatically send initial message to trigger mandatory tool calls
+        let priming_message = "Begin analysis. Please run all mandatory tools.".to_string();
+
+        eprintln!("[Auto-Prime] Sending priming message: {}", priming_message);
+
+        // Add user message to timeline
+        let now = chrono::Utc::now().timestamp();
+        let user_event = TimelineEvent::UserMessage {
+            content: priming_message.clone(),
+            timestamp: now,
+        };
+        self.timeline_events.push(user_event);
+
+        // Also save to messages vec
+        let message = Message::user(priming_message.clone());
+        self.messages.push(message.clone());
+
+        if let Some(storage) = &self.storage {
+            let _ = storage.save_message(&message);
+        }
+
+        cx.notify();
+
+        // Send to Codex and stream response (same pattern as on_send_message)
+        if let Some(adapter) = &self.codex_adapter {
+            let adapter = adapter.clone();
+            let storage = self.storage.clone();
+            let tokio_handle = self.tokio_handle.clone();
+
+            // Create channel for streaming
+            let (tx, rx) = smol::channel::bounded::<types::StreamEvent>(100);
+
+            // Send via ACP asynchronously
+            let adapter_clone = adapter.clone();
+            let tx_clone = tx.clone();
+
+            std::thread::spawn(move || {
+                tokio_handle.block_on(async move {
+                    let result = adapter_clone.send_message(priming_message, move |event| {
+                        let _ = tx.send_blocking(event);
+                    });
+
+                    if let Err(e) = result {
+                        eprintln!("[Auto-Prime] Failed to send message: {}", e);
+                        let _ = tx_clone.send_blocking(types::StreamEvent::MessageChunk(
+                            format!("\n\nError: {}", e)
+                        ));
+                    }
+                });
+            });
+
+            // Process streaming events (same pattern as on_send_message)
+            cx.spawn(async move |view: WeakEntity<Self>, cx| {
+                while let Ok(event) = rx.recv().await {
+                    match event {
+                        types::StreamEvent::MessageChunk(chunk) => {
+                            view.update(cx, |view, cx| {
+                                view.current_message_buffer.push_str(&chunk);
+                                cx.notify();
+                            })?;
+                        }
+                        types::StreamEvent::ThoughtChunk(chunk) => {
+                            view.update(cx, |view, cx| {
+                                view.current_thought_buffer.push_str(&chunk);
+                                cx.notify();
+                            })?;
+                        }
+                        types::StreamEvent::ToolCall(tool_call) => {
+                            view.update(cx, |view, cx| {
+                                view.active_tool_calls.insert(
+                                    tool_call.tool_call_id.clone(),
+                                    (tool_call, String::new())
+                                );
+                                cx.notify();
+                            })?;
+                        }
+                        types::StreamEvent::ToolCallUpdate(update) => {
+                            view.update(cx, |view, cx| {
+                                if let Some((tool_call, output)) = view.active_tool_calls.get_mut(&update.tool_call_id) {
+                                    if let Some(status) = &update.status {
+                                        tool_call.status = status.clone();
+                                    }
+                                    if let Some(content) = &update.content {
+                                        output.push_str(content);
+                                    }
+                                }
+                                cx.notify();
+                            })?;
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Stream complete - convert buffers to timeline events
+                view.update(cx, |view, cx| {
+                    let now = chrono::Utc::now().timestamp();
+
+                    // Add thought to timeline if present
+                    if !view.current_thought_buffer.is_empty() {
+                        view.timeline_events.push(TimelineEvent::Thought {
+                            content: view.current_thought_buffer.clone(),
+                            timestamp: now,
+                        });
+                        view.current_thought_buffer.clear();
+                    }
+
+                    // Add tool calls to timeline
+                    for (_id, (tool_call, output)) in view.active_tool_calls.drain() {
+                        view.timeline_events.push(TimelineEvent::ToolCall {
+                            tool_call_id: tool_call.tool_call_id,
+                            title: tool_call.title,
+                            kind: tool_call.kind,
+                            status: tool_call.status,
+                            locations: tool_call.locations,
+                            output: if output.is_empty() { None } else { Some(output) },
+                            timestamp: now,
+                            mcp_server: tool_call.mcp_server,
+                            routed_via: None,
+                        });
+                    }
+
+                    // Add assistant message to timeline if present
+                    if !view.current_message_buffer.is_empty() {
+                        let msg_content = view.current_message_buffer.clone();
+                        view.timeline_events.push(TimelineEvent::AssistantMessage {
+                            content: msg_content.clone(),
+                            timestamp: now,
+                        });
+
+                        // Save to storage
+                        if let Some(storage) = &storage {
+                            let msg = Message::assistant(msg_content);
+                            let _ = storage.save_message(&msg);
+                        }
+
+                        view.current_message_buffer.clear();
+                    }
+
+                    // Auto-scroll to bottom
+                    view.timeline_scroll_handle.set_offset(point(px(0.0), px(999999.0)));
+
+                    cx.notify();
+                })?;
+
+                eprintln!("[Auto-Prime] Stream complete");
+                Ok::<(), anyhow::Error>(())
+            })
+            .detach();
+        } else {
+            eprintln!("[Auto-Prime] No Codex adapter available");
+            self.error_message = Some("Codex not initialized".to_string());
+            cx.notify();
         }
     }
 
@@ -534,6 +721,215 @@ impl CodexView {
             self.timeline_events.push(error_event);
             cx.notify();
         }
+    }
+
+    fn render_timeline_event_interactive(&self, event: TimelineEvent, cx: &mut Context<Self>) -> Div {
+        use crate::types::TimelineEvent;
+        use crate::ui::components::{render_user_message, render_thought, render_assistant_message,
+                                     render_mcp_server_connected, render_mcp_server_disconnected,
+                                     render_agent_fix_prompt, render_security_finding};
+
+        match event {
+            TimelineEvent::UserMessage { content, .. } => render_user_message(&content),
+            TimelineEvent::Thought { content, .. } => render_thought(&content),
+            TimelineEvent::ToolCall { tool_call_id, title, kind, status, locations, output, mcp_server, routed_via, .. } => {
+                self.render_tool_call_interactive(tool_call_id, title, kind, status, locations, output, mcp_server, routed_via, cx)
+            }
+            TimelineEvent::AssistantMessage { content, .. } => render_assistant_message(&content),
+            TimelineEvent::McpServerConnected { server_type, host, port, .. } => {
+                render_mcp_server_connected(&server_type, &host, port)
+            }
+            TimelineEvent::McpServerDisconnected { server_type, reason, .. } => {
+                render_mcp_server_disconnected(&server_type, reason.as_deref())
+            }
+            TimelineEvent::AgentFixPrompt { prompt, .. } => {
+                render_agent_fix_prompt(&prompt)
+            }
+            TimelineEvent::SecurityFinding {
+                vulnerability_id, severity, title, description,
+                file_path, line_number, cwe_id, recommendation, ..
+            } => {
+                render_security_finding(
+                    &vulnerability_id,
+                    &severity,
+                    &title,
+                    &description,
+                    &file_path,
+                    line_number,
+                    cwe_id.as_deref(),
+                    &recommendation
+                )
+            }
+        }
+    }
+
+    fn render_tool_call_interactive(
+        &self,
+        tool_call_id: String,
+        title: String,
+        _kind: String,
+        status: crate::types::ToolCallStatus,
+        locations: Vec<crate::types::ToolCallLocation>,
+        output: Option<String>,
+        mcp_server: Option<crate::types::McpServerType>,
+        routed_via: Option<crate::types::McpServerType>,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let is_expanded = self.expanded_tool_calls.contains(&tool_call_id);
+        // Use a stable unique ID based on tool_call_id hash
+        let button_id_hash = {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            tool_call_id.hash(&mut hasher);
+            hasher.finish() as usize
+        };
+        let bg_tool_call = rgb(0xe8f5e9);
+        let (status_text, status_color) = match &status {
+            crate::types::ToolCallStatus::InProgress => ("🔄 Running", rgb(0x1976d2)),
+            crate::types::ToolCallStatus::Completed => ("✅ Completed", rgb(0x388e3c)),
+            crate::types::ToolCallStatus::Failed => ("❌ Failed", rgb(0xd32f2f)),
+        };
+
+        // Generate summary from output
+        let summary = output.as_ref().map(|out| {
+            let first_line = out.lines().next().unwrap_or("");
+            if first_line.len() > 80 {
+                format!("{}...", &first_line[..80])
+            } else {
+                first_line.to_string()
+            }
+        }).unwrap_or_else(|| "No output".to_string());
+
+        div()
+            .flex()
+            .w_full()
+            .px_4()
+            .justify_start()
+            .child(
+                div()
+                    .max_w(px(600.0))
+                    .px_3()
+                    .py_1p5()
+                    .bg(bg_tool_call)
+                    .border_1()
+                    .border_color(rgb(0x81c784))
+                    .rounded_md()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        // Header with title, status, and expand button
+                        div()
+                            .flex()
+                            .justify_between()
+                            .items_center()
+                            .child(
+                                div()
+                                    .flex()
+                                    .gap_2()
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_color(rgb(0x2e7d32))
+                                            .child(format!("🔧 {}", title))
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(status_color)
+                                            .child(status_text)
+                                    )
+                            )
+                            .child({
+                                let view = cx.entity().clone();
+                                let id = tool_call_id.clone();
+                                Button::new(("expand", button_id_hash))
+                                    .label(if is_expanded { "▼ Collapse" } else { "▶ Expand" })
+                                    .on_click(move |_, _, cx| {
+                                        view.update(cx, |view, cx| {
+                                            view.toggle_tool_expansion(id.clone(), cx);
+                                        });
+                                    })
+                            })
+                    )
+                    // MCP Server source
+                    .when_some(mcp_server, |container, server| {
+                        container.child(
+                            div()
+                                .flex()
+                                .gap_2()
+                                .items_center()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(0x616161))
+                                        .child(format!("{} via {}",
+                                            server.icon(),
+                                            server.display_name()
+                                        ))
+                                )
+                                .when_some(routed_via, |div_inner, gateway| {
+                                    div_inner.child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(0x757575))
+                                            .child(format!("→ {} {}",
+                                                gateway.icon(),
+                                                gateway.display_name()
+                                            ))
+                                    )
+                                })
+                        )
+                    })
+                    // File locations if present
+                    .when(!locations.is_empty(), |container| {
+                        container.child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(0x616161))
+                                .child(
+                                    locations
+                                        .iter()
+                                        .map(|loc| loc.path.clone())
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                )
+                        )
+                    })
+                    // Summary (always shown)
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(0x616161))
+                            .italic()
+                            .child(summary)
+                    )
+                    // Full output if expanded
+                    .when(is_expanded, |container| {
+                        container.when_some(output, |c, out| {
+                            c.child(
+                                div()
+                                    .mt_2()
+                                    .pt_2()
+                                    .border_t_1()
+                                    .border_color(rgb(0xc8e6c9))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(0x424242))
+                                            .font_family("monospace")
+                                            .line_height(relative(1.5))
+                                            .max_h(px(300.0))
+                                            .overflow_hidden()
+                                            .child(out.to_string())
+                                    )
+                            )
+                        })
+                    })
+            )
     }
 }
 
@@ -707,8 +1103,8 @@ impl CodexView {
     }
 
     fn render_page_3(&mut self, cx: &mut Context<Self>) -> Div {
-        let bg_user = rgb(0xe8f2ff);
-        let bg_assistant = rgb(0xf0f4f8);
+        let _bg_user = rgb(0xe8f2ff);
+        let _bg_assistant = rgb(0xf0f4f8);
 
         div()
             .flex()
@@ -751,7 +1147,13 @@ impl CodexView {
                             .flex()
                             .flex_col()
                             .gap_3()
-                            .child(render_timeline(&self.timeline_events))
+                            .children({
+                                let mut sorted_events = self.timeline_events.clone();
+                                sorted_events.sort_by_key(|e| e.timestamp());
+                                sorted_events.into_iter().map(|event| {
+                                    self.render_timeline_event_interactive(event, cx)
+                                })
+                            })
                             // Add streaming views for active buffers
                             .when(!self.current_thought_buffer.is_empty(), |parent| {
                                 parent.child(render_streaming_thought(&self.current_thought_buffer))
