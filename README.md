@@ -6,7 +6,8 @@
 
 ## Demo
 
-🌐 **Live Demo**: [https://codexd.lovable.app/](https://codexd.lovable.app/)
+🎥 **Live Demo**: [https://screen.studio/share/olCN1F0V](https://screen.studio/share/olCN1F0V)
+🌐 **Landing Page**: [https://codexd.lovable.app/](https://codexd.lovable.app/)
 
 ## What is Codex-D?
 
