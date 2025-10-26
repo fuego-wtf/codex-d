@@ -17,6 +17,7 @@ pub struct CodexAdapter {
     session_id: Arc<Mutex<Option<String>>>,
     mcp_server_process: Arc<Mutex<Option<Child>>>,
     repo_path: Arc<Mutex<Option<String>>>,
+    system_prompt: Arc<Mutex<String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -48,6 +49,7 @@ impl CodexAdapter {
             session_id: Arc::new(Mutex::new(None)),
             mcp_server_process: Arc::new(Mutex::new(None)),
             repo_path: Arc::new(Mutex::new(None)),
+            system_prompt: Arc::new(Mutex::new(String::new())),
         })
     }
 
@@ -144,19 +146,24 @@ impl CodexAdapter {
 
         let id = self.next_id();
 
-        // Get current working directory
-        let cwd = std::env::current_dir()
-            .context("Failed to get current directory")?
-            .to_string_lossy()
-            .to_string();
+        // Use the dropped repository path as working directory (not the app's directory)
+        let cwd = repo_path.clone();
 
-        // Configure MCP server connection with SSE transport
-        let mcp_servers = json!([{
-            "name": "codex-psychology",
-            "type": "sse",
-            "url": "http://127.0.0.1:52848/sse",
-            "headers": []
-        }]);
+        // Configure MCP server connection with HTTP transport (codex-acp only supports HTTP, not SSE)
+        let mcp_servers = json!([
+            {
+                "name": "codex-psychology",
+                "type": "http",
+                "url": "http://127.0.0.1:52848/mcp",
+                "headers": []
+            },
+            {
+                "name": "deepwiki",
+                "type": "http",
+                "url": "https://mcp.aci.dev/gateway/mcp?bundle_key=3Nhg7HK34j8ylWkv4uTeCssOKX3vdMxHfOuD",
+                "headers": []
+            }
+        ]);
 
         let request = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
@@ -182,6 +189,9 @@ impl CodexAdapter {
             .to_string();
 
         *self.session_id.lock().unwrap() = Some(session_id.clone());
+
+        // Store system prompt for use with each message
+        *self.system_prompt.lock().unwrap() = system_prompt;
 
         eprintln!("Session created: {}", session_id);
 
@@ -306,6 +316,9 @@ impl CodexAdapter {
         let session_id = self.session_id.lock().unwrap().clone()
             .ok_or_else(|| anyhow!("No active session"))?;
 
+        // Get the system prompt to send with each message (like secretsoul-gpui)
+        let system_prompt = self.system_prompt.lock().unwrap().clone();
+
         let id = self.next_id();
 
         let request = JsonRpcRequest {
@@ -314,6 +327,12 @@ impl CodexAdapter {
             method: "session/prompt".to_string(),
             params: json!({
                 "sessionId": session_id,
+                "systemPrompt": [
+                    {
+                        "type": "text",
+                        "text": system_prompt,
+                    }
+                ],
                 "prompt": [
                     {
                         "type": "text",
@@ -483,10 +502,16 @@ impl CodexAdapter {
     }
 
     fn find_codex_acp() -> Result<String> {
-        // Check if codex-acp exists in submodule
-        let submodule_path = "./codex-acp/target/release/codex-acp";
-        if std::path::Path::new(submodule_path).exists() {
-            return Ok(submodule_path.to_string());
+        // Check if codex-acp exists in submodule (release)
+        let release_path = "./codex-acp/target/release/codex-acp";
+        if std::path::Path::new(release_path).exists() {
+            return Ok(release_path.to_string());
+        }
+
+        // Check if codex-acp exists in submodule (debug)
+        let debug_path = "./codex-acp/target/debug/codex-acp";
+        if std::path::Path::new(debug_path).exists() {
+            return Ok(debug_path.to_string());
         }
 
         // Check in PATH

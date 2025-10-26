@@ -11,5 +11,6 @@ sys.path.insert(0, str(project_root))
 from mcp_server.server import mcp
 
 if __name__ == "__main__":
-    # Run with SSE transport on port 52848 (different from self-reflect's 52847)
-    mcp.run(transport="sse", host="127.0.0.1", port=52848)
+    # Run with HTTP transport on port 52848 (different from self-reflect's 52847)
+    # Using streamable-http instead of sse for codex-acp compatibility
+    mcp.run(transport="streamable-http", host="127.0.0.1", port=52848)
